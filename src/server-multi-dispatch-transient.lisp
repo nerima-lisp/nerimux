@@ -125,7 +125,7 @@
         (format nil "~A: ~A~A" head (%clip-text detail room) hint)
         (format nil "~A~A" head hint))))
 
-(defun %run-transient-git-write (conn repository operation args)
+(defun %run-transient-git-write (conn repository operation args &key working-directory)
   (let ((command (%transient-command-text operation args)))
     (%client-notify conn
                     (%clip-text (format nil "running ~A" command)
@@ -133,6 +133,7 @@
     (nerimux/vcs:git-write-operation-async repository
                                            operation
                                            args
+                                           :working-directory working-directory
                                            :callback-dispatch
                                            #'%enqueue-main-thread-callback
                                            :on-complete
@@ -507,6 +508,17 @@
    and clean all set CONFIRM-P directly instead, since none of them gate on
    an argument toggle)."
   (let* ((repository (%client-selected-repository conn))
+         (object (%client-context-object conn nil))
+         (worktree (typecase object
+                     (nerimux/workspace-model:worktree object)
+                     (nerimux/workspace-model:repository nil)
+                     (nerimux/workspace-model:organization nil)
+                     (t (%client-context-worktree conn))))
+         (working-directory
+           (and worktree
+                (eq repository
+                    (nerimux/workspace-model:worktree-repository worktree))
+                (nerimux/workspace-model:worktree-path worktree)))
          (active (%client-transient-active-flags conn transient-key))
          (args (append static-args active))
          (force-p
@@ -530,8 +542,15 @@
                              (%run-transient-git-write conn
                                                        repository
                                                        operation
-                                                       args))))
-      (t (%run-transient-git-write conn repository operation args)))))
+                                                       args
+                                                       :working-directory
+                                                       working-directory))))
+      (t (%run-transient-git-write conn
+                                   repository
+                                   operation
+                                   args
+                                   :working-directory
+                                   working-directory)))))
 
 (defvar *client-transient-keys*
   (make-hash-table :test #'eq :weakness :key)

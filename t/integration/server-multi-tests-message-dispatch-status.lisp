@@ -30,12 +30,12 @@
         (with-stubbed-fdefinition
             ((nerimux/vcs:vcs-package-available-p (lambda () nil))
              (nerimux/vcs:git-write-operation-async
-               (lambda (received-repository operation arguments
-                        &key callback-dispatch on-complete on-error)
-                 (declare (ignore callback-dispatch on-error))
-                 (push (list received-repository operation arguments) calls)
-                 (when on-complete (funcall on-complete t ""))
-                 t)))
+              (lambda (received-repository operation arguments
+                                           &key callback-dispatch on-complete on-error working-directory)
+                (declare (ignore callback-dispatch on-error working-directory))
+                (push (list received-repository operation arguments) calls)
+                (when on-complete (funcall on-complete t ""))
+                t)))
           (dolist (key '("S" "U"))
             (finishes (nerimux::%handle-multi-key-message s conn key)))
           (dolist (key '("s" "u" "k"))
@@ -74,12 +74,12 @@
         (with-stubbed-fdefinition
             ((nerimux/vcs:vcs-package-available-p (lambda () nil))
              (nerimux/vcs:git-write-operation-async
-               (lambda (received-repository operation arguments
-                        &key callback-dispatch on-complete on-error)
-                 (declare (ignore callback-dispatch on-error))
-                 (push (list received-repository operation arguments) calls)
-                 (when on-complete (funcall on-complete t ""))
-                 t)))
+              (lambda (received-repository operation arguments
+                                           &key callback-dispatch on-complete on-error working-directory)
+                (declare (ignore callback-dispatch on-error working-directory))
+                (push (list received-repository operation arguments) calls)
+                (when on-complete (funcall on-complete t ""))
+                t)))
           (nerimux::%handle-multi-key-message s conn "k")
           (expect (null calls))
           (expect (eq :confirm (nerimux::client-conn-modal conn)))
@@ -132,12 +132,12 @@
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () nil))
                (nerimux/vcs:git-write-operation-async
-                 (lambda (received-repository operation arguments
-                          &key callback-dispatch on-complete on-error)
-                   (declare (ignore callback-dispatch on-error))
-                   (push (list received-repository operation arguments) calls)
-                   (when on-complete (funcall on-complete t ""))
-                   t)))
+                (lambda (received-repository operation arguments
+                                             &key callback-dispatch on-complete on-error working-directory)
+                  (declare (ignore callback-dispatch on-error working-directory))
+                  (push (list received-repository operation arguments) calls)
+                  (when on-complete (funcall on-complete t ""))
+                  t)))
             (nerimux::%handle-multi-key-message s conn "k")
             (expect (string= "git restore --staged --worktree -- a.txt"
                              (nerimux/renderer:confirm-view-operation
@@ -163,12 +163,12 @@
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () nil))
                (nerimux/vcs:git-write-operation-async
-                 (lambda (received-repository operation arguments
-                          &key callback-dispatch on-complete on-error)
-                   (declare (ignore callback-dispatch on-error))
-                   (push (list received-repository operation arguments) calls)
-                   (when on-complete (funcall on-complete t ""))
-                   t)))
+                (lambda (received-repository operation arguments
+                                             &key callback-dispatch on-complete on-error working-directory)
+                  (declare (ignore callback-dispatch on-error working-directory))
+                  (push (list received-repository operation arguments) calls)
+                  (when on-complete (funcall on-complete t ""))
+                  t)))
             (nerimux::%handle-multi-key-message s conn "k")
             (expect (string= "delete untracked file"
                              (nerimux/renderer:confirm-view-operation
@@ -197,12 +197,12 @@
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () nil))
                (nerimux/vcs:git-write-operation-async
-                 (lambda (received-repository operation arguments
-                          &key callback-dispatch on-complete on-error)
-                   (declare (ignore callback-dispatch on-error))
-                   (push (list received-repository operation arguments) calls)
-                   (when on-complete (funcall on-complete t ""))
-                   t)))
+                (lambda (received-repository operation arguments
+                                             &key callback-dispatch on-complete on-error working-directory)
+                  (declare (ignore callback-dispatch on-error working-directory))
+                  (push (list received-repository operation arguments) calls)
+                  (when on-complete (funcall on-complete t ""))
+                  t)))
             (nerimux::%handle-multi-key-message s conn "u")
             (expect (null calls))
             (expect (string= "nothing to unstage"
@@ -220,12 +220,12 @@
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () nil))
                (nerimux/vcs:git-write-operation-async
-                 (lambda (received-repository operation arguments
-                          &key callback-dispatch on-complete on-error)
-                   (declare (ignore callback-dispatch on-error))
-                   (push (list received-repository operation arguments) calls)
-                   (when on-complete (funcall on-complete t ""))
-                   t)))
+                (lambda (received-repository operation arguments
+                                             &key callback-dispatch on-complete on-error working-directory)
+                  (declare (ignore callback-dispatch on-error working-directory))
+                  (push (list received-repository operation arguments) calls)
+                  (when on-complete (funcall on-complete t ""))
+                  t)))
             (nerimux::%handle-multi-key-message s conn "s")
             (expect (null calls))
             (expect (string= "already staged"
@@ -252,9 +252,10 @@
                  (lambda (ignored-connection)
                    (declare (ignore ignored-connection))))
                (nerimux/vcs:git-write-operation-async
-                 (lambda (received-repository operation arguments
-                          &key callback-dispatch on-complete on-error)
-                   (declare (ignore callback-dispatch on-error))
+                 (lambda (received-repository operation arguments &key callback-dispatch on-complete
+                          on-error working-directory)
+                   (declare (ignore callback-dispatch on-error
+                                    working-directory))
                    (push (list received-repository operation arguments) calls)
                    (when on-complete (funcall on-complete t ""))
                    t)))
@@ -265,4 +266,54 @@
             (expect (nerimux/renderer:transient-view-subtitle
                      (nerimux::client-conn-transient-view conn)))
             (nerimux::%handle-multi-key-message s conn "p")
-            (expect (equal (list (list repository :pull nil)) calls))))))))
+            (expect (equal (list (list repository :pull nil)) calls)))))))
+  (it "B2-selected-worktree-working-directory-reaches-switch-minus"
+    (with-fake-session (s)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization :id "b2-org"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "b2-bare-repo" :organization organization
+                :specification "bare-repo"
+                :local-path "/tmp/bare-repo.git"))
+             (alpha
+               (nerimux/workspace-model:make-worktree
+                :id "b2-alpha" :repository repository
+                :path "/tmp/bare-repo.git/.worktrees/alpha"
+                :branch "feature/alpha"))
+             (beta
+               (nerimux/workspace-model:make-worktree
+                :id "b2-beta" :repository repository
+                :path "/tmp/bare-repo.git/.worktrees/beta"
+                :branch "feature/beta"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (nerimux/vcs::*workspace-organizations* (list organization))
+             (calls nil))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux/workspace-model:repository-add-worktree repository alpha)
+        (nerimux/workspace-model:repository-add-worktree repository beta)
+        (setf (nerimux::client-conn-view conn) :status
+              (nerimux::client-conn-selected-worktree conn) alpha)
+        (expect (eq beta
+                    (first
+                     (nerimux/workspace-model:repository-worktrees repository))))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux::%refresh-client-picker
+               (lambda (ignored-connection)
+                 (declare (ignore ignored-connection))))
+             (nerimux/vcs:git-write-operation-async
+               (lambda (received-repository operation arguments
+                        &key callback-dispatch on-complete on-error working-directory)
+                 (declare (ignore callback-dispatch on-error))
+                 (push (list received-repository operation arguments working-directory)
+                       calls)
+                 (when on-complete (funcall on-complete t ""))
+                 t)))
+          (nerimux::%run-transient-git-action
+           conn #\b :switch (list "-") nil nil)
+          (expect
+           (equal (list (list repository :switch (list "-")
+                              (nerimux/workspace-model:worktree-path alpha)))
+                  calls)))))))

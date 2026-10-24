@@ -61,6 +61,28 @@ process (e.g. a launch failure), in which case this returns \"\"."
             (t stdout))))
     (%truncate-write-output (%strip-control-characters combined))))
 
+(defun %run-git-write-operation (repository operation arguments
+                                               &optional working-directory)
+  (let ((function (%write-operation-function operation))
+        (handle (%repository-checked-handle repository)))
+    (handler-case
+        (let ((result
+                (apply function
+                       handle
+                       (append arguments
+                               (list :execution-options
+                                     (append
+                                      (list :max-output-characters
+                                            *write-operation-output-max-characters*)
+                                      (when working-directory
+                                        (list :directory working-directory))))))))
+          (values t (%write-operation-result-text result)))
+      (vcs-kit:vcs-error (condition)
+        (values nil
+                (%write-operation-result-text
+                 (and (typep condition 'vcs-kit:git-error)
+                      (vcs-kit:git-error-result condition))))))))
+
 (defun git-write-operation (repository operation &rest arguments)
   "Run a git write OPERATION (:add :commit :push :pull :branch :merge
 :rebase :stash :reset :restore :tag :clean :switch) with ARGUMENTS against
@@ -75,21 +97,7 @@ carries one (a GIT-LAUNCH-ERROR or GIT-IO-ERROR does not). Anything else --
 a TYPE-ERROR from a wrong-typed argument, a PROGRAM-ERROR from a malformed
 trailing options plist -- is a programmer error, not a git failure, and is
 left to propagate."
-  (let ((function (%write-operation-function operation))
-        (handle (%repository-checked-handle repository)))
-    (handler-case (let ((result
-                         (apply function
-                                handle
-                                (append arguments
-                                        (list :execution-options
-                                              (list :max-output-characters
-                                                    *write-operation-output-max-characters*))))))
-                    (values t (%write-operation-result-text result)))
-      (vcs-kit:vcs-error (condition)
-        (values nil
-                (%write-operation-result-text
-                 (and (typep condition 'vcs-kit:git-error)
-                      (vcs-kit:git-error-result condition))))))))
+  (%run-git-write-operation repository operation arguments))
 
 (defvar *write-lock*
   (cl-concurrent-kit:make-lock :name "nerimux-vcs-write"))
@@ -112,7 +120,8 @@ left to propagate."
                                              &key
                                              callback-dispatch
                                              on-complete
-                                             on-error)
+                                             on-error
+                                             working-directory)
   "Run GIT-WRITE-OPERATION on a worker thread and dispatch one completion
 callback with the same (values SUCCESS-P OUTPUT-STRING) it returns
 synchronously.
@@ -137,11 +146,11 @@ NIL, exactly as it does synchronously."
     (if (%write-begin key)
         (cl-concurrent-kit:make-thread
          (lambda ()
-           (handler-case (multiple-value-bind (success-p output) 
-                             (apply #'git-write-operation
-                                    repository
-                                    operation
-                                    arguments)
+           (handler-case (multiple-value-bind (success-p output)
+                             (%run-git-write-operation repository
+                                                       operation
+                                                       arguments
+                                                       working-directory)
                            (%write-end key)
                            (%dispatch-callback callback-dispatch
                                                on-complete

@@ -359,14 +359,10 @@
                                        (declare (ignore ignored-connection))))
                                     (nerimux/vcs:git-write-operation-async
                                      (lambda
-                                         (received operation
-                                                   args
-                                                   &key
-                                                   on-complete
-                                                   on-error
-                                                   callback-dispatch)
-                                       (declare (ignore callback-dispatch
-                                                        on-error))
+                                         (received operation args &key on-complete on-error
+                                          callback-dispatch working-directory)
+                                       (declare (ignore callback-dispatch on-error
+                                                        working-directory))
                                        (push (list received operation args)
                                              calls)
                                        (funcall on-complete t "done")
@@ -414,10 +410,10 @@
                                 (with-stubbed-fdefinition
                                     ((nerimux/vcs:vcs-package-available-p (lambda () t))
                                      (nerimux/vcs:git-write-operation-async
-                                      (lambda (received operation args &key on-complete
-                                                       on-error callback-dispatch)
-                                        (declare (ignore received operation args on-error
-                                                                callback-dispatch))
+                                      (lambda (received operation args &key on-complete on-error
+                                               callback-dispatch working-directory)
+                                        (declare (ignore received operation args on-error callback-dispatch
+                                                         working-directory))
                                         (funcall on-complete
                                                  nil
                                                  (format nil
@@ -467,9 +463,9 @@
                         ((nerimux/vcs:vcs-package-available-p (lambda () t))
                          (nerimux/vcs:git-write-operation-async
                            (lambda (received operation args &key on-complete on-error
-                                            callback-dispatch)
-                             (declare (ignore received operation args on-complete
-                                                     callback-dispatch))
+                                    callback-dispatch working-directory)
+                             (declare (ignore received operation args on-complete callback-dispatch
+                                              working-directory))
                              (funcall on-error (make-condition 'simple-error
                                                                :format-control "boom")))))
                       (nerimux::%run-transient-git-action conn #\P :push nil nil nil)
@@ -531,8 +527,10 @@
                     (with-stubbed-fdefinition
                         ((nerimux/vcs:vcs-package-available-p (lambda () t))
                          (nerimux/vcs:git-write-operation-async
-                           (lambda (received operation args &key on-complete on-error callback-dispatch)
-                             (declare (ignore on-error callback-dispatch))
+                           (lambda (received operation args &key on-complete on-error
+                                    callback-dispatch working-directory)
+                             (declare (ignore on-error callback-dispatch
+                                              working-directory))
                              (push (list received operation args) calls)
                              (funcall on-complete t "done"))))
                       (labels ((send (payload)
@@ -585,11 +583,10 @@
                       (with-stubbed-fdefinition
                           ((nerimux/vcs:vcs-package-available-p (lambda () t))
                            (nerimux/vcs:git-write-operation-async
-                             (lambda (received operation args &key on-complete
-                                               on-error callback-dispatch)
-                               (declare (ignore received operation args
-                                                on-complete on-error
-                                                callback-dispatch))
+                             (lambda (received operation args &key on-complete on-error
+                                      callback-dispatch working-directory)
+                               (declare (ignore received operation args on-complete
+                                                on-error callback-dispatch working-directory))
                                (push t calls))))
                         (nerimux::%open-client-text-prompt conn kind)
                         (cl-tui-kit/widgets:handle-widget-event
@@ -624,10 +621,10 @@
                     (with-stubbed-fdefinition
                         ((nerimux/vcs:vcs-package-available-p (lambda () t))
                          (nerimux/vcs:git-write-operation-async
-                           (lambda (received operation args &key on-complete
-                                             on-error callback-dispatch)
+                           (lambda (received operation args &key on-complete on-error
+                                    callback-dispatch working-directory)
                              (declare (ignore received operation args on-error
-                                              callback-dispatch))
+                                              callback-dispatch working-directory))
                              (funcall on-complete t "done"))))
                       (nerimux::%open-client-text-prompt conn :commit-message)
                       (cl-tui-kit/widgets:handle-widget-event
@@ -654,8 +651,10 @@
                     (with-stubbed-fdefinition
                         ((nerimux/vcs:vcs-package-available-p (lambda () t))
                          (nerimux/vcs:git-write-operation-async
-                           (lambda (received operation args &key on-complete on-error callback-dispatch)
-                             (declare (ignore on-error callback-dispatch))
+                           (lambda (received operation args &key on-complete on-error
+                                    callback-dispatch working-directory)
+                             (declare (ignore on-error callback-dispatch
+                                              working-directory))
                              (push (list received operation args) calls)
                              (funcall on-complete t "done"))))
                       (labels ((send-text (text)
@@ -715,9 +714,9 @@
                    (declare (ignore ignored-connection))))
                (nerimux/vcs:git-write-operation-async
                  (lambda (received operation args &key on-complete on-error
-                                   callback-dispatch)
+                          callback-dispatch working-directory)
                    (declare (ignore received operation args on-error
-                                    callback-dispatch))
+                                    callback-dispatch working-directory))
                    (funcall on-complete t "[main abc1234] subject line"))))
             (nerimux::%run-transient-git-write
              conn repository :commit
@@ -808,8 +807,9 @@
                    (declare (ignore ignored-connection))))
                (nerimux/vcs:git-write-operation-async
                  (lambda (received operation args &key on-complete on-error
-                                   callback-dispatch)
-                   (declare (ignore on-error callback-dispatch))
+                          callback-dispatch working-directory)
+                   (declare (ignore on-error callback-dispatch
+                                    working-directory))
                    (push (list received operation args) calls)
                    (funcall on-complete t "done"))))
             (nerimux::%open-client-text-prompt conn :branch-delete)

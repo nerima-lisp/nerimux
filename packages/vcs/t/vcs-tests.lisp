@@ -1177,3 +1177,37 @@
                    (not
                     (nerimux/workspace-model:repository-conflict-p repository)))))
 )
+(describe "git write working directory"
+  (it "passes a selected worktree directory through the async adapter"
+    (let* ((repository
+            (nerimux/workspace-model:make-repository
+             :id "bare-worktree-repo"
+             :local-path "/tmp/bare-worktree-repo.git"))
+           (worktree-path "/tmp/bare-worktree-repo.git/.worktrees/alpha")
+           (repository-directory nil)
+           (execution-options nil)
+           (completed nil)
+           (nerimux/vcs::*write-operations*
+             (list
+              (cons :switch
+                    (lambda (handle &rest arguments)
+                      (setf repository-directory
+                            (vcs-kit:repository-directory handle)
+                            execution-options
+                            (getf (rest arguments) :execution-options))
+                      nil)))))
+      (with-stubbed-fdefinition
+          ((cl-concurrent-kit:make-thread
+             (lambda (function &key name)
+               (declare (ignore name))
+               (funcall function))))
+        (nerimux/vcs:git-write-operation-async
+         repository :switch (list "-")
+         :working-directory worktree-path
+         :on-complete
+         (lambda (success-p output)
+           (setf completed (list success-p output)))))
+      (expect (search "/tmp/bare-worktree-repo.git/"
+                      repository-directory))
+      (expect (equal worktree-path (getf execution-options :directory)))
+      (expect (equal (list t "") completed)))))
