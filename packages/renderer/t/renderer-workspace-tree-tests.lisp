@@ -356,12 +356,12 @@
 
 (describe "renderer-suite/workspace-empty-catalog-hint"
 
-  (it "offers ghq get when ghq answered with a real root"
+  (it "offers bare clone guidance when ghq answered with a real root"
     (let ((frame
             (nerimux/renderer:render-workspace-overview-to-string
              nil 24 80 :catalog-empty-hint "/home/u/ghq")))
       (expect (search "no repositories found" frame))
-      (expect (search "get one: ghq get <owner>/<repo>" frame))))
+      (expect (search "clone one: :clone <url>" frame))))
 
   (it "points at ghq itself, not ghq get, when ghq is the thing missing"
     (let ((frame
@@ -381,7 +381,7 @@
              nil 24 80 :catalog-empty-hint "/tmp/ghq")))
       (expect (search "no repositories found" frame))
       (expect (search "/tmp/ghq" frame))
-      (expect (search "ghq get <owner>/<repo>" frame))))
+      (expect (search "clone one: :clone <url>" frame))))
 
   (it "does not show the empty-catalog hint while a scan is running"
     (let ((frame
@@ -710,7 +710,37 @@
           (expect (search "failed" (second repo-row)))
           (expect (search "..." (second worktree-row)))
           (expect (not (search "succeeded" (second section-row))))
-          (expect (not (search "[" (second section-row)))))))))
+          (expect (not (search "[" (second section-row))))))))
+  (it "shows clone progress on a repository row before its first worktree exists"
+    (let* ((repository
+             (nerimux/workspace-model:make-repository
+              :specification "github.com/team/new-repo"))
+           (organization
+             (nerimux/workspace-model:make-organization
+              :host "github.com"
+              :name "team"))
+           (key (list :repository
+                      (nerimux/workspace-model:repository-id repository)))
+           (labels (make-hash-table :test #'equal)))
+      (nerimux/workspace-model:organization-add-repository
+       organization repository)
+      (setf (gethash key labels) " [clone:running |]")
+      (let ((row
+              (find repository
+                    (nerimux/renderer:workspace-flat-tree-entries
+                     (list organization) nil :job-labels labels)
+                    :key #'third
+                    :test #'eq)))
+        (expect row)
+        (expect (search "..." (second row))))
+      (setf (gethash key labels) " [clone:failed invalid source]")
+      (let ((row
+              (find repository
+                    (nerimux/renderer:workspace-flat-tree-entries
+                     (list organization) nil :job-labels labels)
+                    :key #'third
+                    :test #'eq)))
+        (expect (search "failed: invalid source" (second row)))))))
 (describe "agent-workspace merge additions"
   (it "shows terminal count without confusing terminal exit with agent exit"
       (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))

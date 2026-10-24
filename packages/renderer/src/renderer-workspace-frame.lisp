@@ -102,7 +102,7 @@
                 (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+)
                 (cons (if ghq-missing-p
                           "install ghq, or add it to PATH"
-                          "get one: ghq get <owner>/<repo>")
+                          "clone one: :clone <url>")
                       +sgr-muted+))))
     (loop for (text . sgr) in lines
           for row from top

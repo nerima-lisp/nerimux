@@ -4,7 +4,7 @@
 
   (it "offers every command name for an empty buffer"
     (expect (equal '("wt-create" "wt-delete" "wt-lock" "wt-unlock"
-                     "wt-prune" "wt-prune-confirm" "wt-complete"
+                     "wt-prune" "wt-prune-confirm" "wt-complete" "clone"
                      "overview" "detail" "refresh" "kill")
                    (nerimux/renderer::%workspace-command-completions ""))))
 
@@ -25,6 +25,9 @@
   (it "offers wt-complete by its unique prefix"
     (expect (equal '("wt-complete")
                    (nerimux/renderer::%workspace-command-completions "wt-comp"))))
+  (it "offers clone by its unique prefix"
+    (expect (equal '("clone")
+                   (nerimux/renderer::%workspace-command-completions "clo"))))
 
   (it "matches a single command by its unique prefix"
     (expect (equal '("refresh")

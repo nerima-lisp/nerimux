@@ -7,6 +7,7 @@
                 "wt-prune"
                 "wt-prune-confirm"
                 "wt-complete"
+                "clone"
                 "overview"
                 "detail"
                 "refresh"
