@@ -27,18 +27,9 @@
   (let ((worktrees
          (vcs-kit:vcs-list-worktrees (%make-directory-vcs-repository directory))))
     (when worktrees
-      (let* ((bare (find-if #'vcs-kit:vcs-worktree-bare-p worktrees))
-             (containing
-               (find-if
-                (lambda (worktree)
-                  (let ((path (vcs-kit:vcs-worktree-path worktree)))
-                    (and (stringp directory)
-                         (stringp path)
-                         (or (string= path directory)
-                             (%directory-under-p path directory)))))
-                worktrees)))
+      (let* ((bare (find-if #'vcs-kit:vcs-worktree-bare-p worktrees)))
         (values (vcs-kit:vcs-worktree-path
-                 (or bare containing (first worktrees)))
+                 (or bare (first worktrees)))
                 worktrees)))))
 
 (defun %directory-specification (repository-root)

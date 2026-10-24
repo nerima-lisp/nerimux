@@ -691,34 +691,50 @@
                       "/tmp/empty-worktrees")
                    (expect (null root))
                    (expect (null worktrees))))))
-          (it "selects the worktree containing the requested directory"
-              (let* ((alpha "/tmp/ghq/example.test/org/bare-repo/.worktrees/alpha")
+          (it "keeps the non-bare repository root when resolving from a linked worktree"
+              (let* ((main-path "/tmp/ghq/example.test/org/repository")
+                     (linked-path "/tmp/ghq/example.test/org/repository-linked")
+                     (directory (format nil "~A/src" linked-path))
                      (worktrees
                       (list
                        (vcs-kit::%make-vcs-worktree
-                        :path
-                        "/tmp/ghq/example.test/org/bare-repo/.worktrees/beta"
-                        :bare-p
-                        nil)
+                        :path main-path :bare-p nil :branch "main")
                        (vcs-kit::%make-vcs-worktree
-                        :path
-                        alpha
-                        :bare-p
-                        nil))))
+                        :path linked-path :bare-p nil :branch "feature"))))
                 (with-stubbed-fdefinition
-                 ((nerimux/vcs::%make-directory-vcs-repository
-                   (lambda (directory)
-                     (declare (ignore directory))
-                     :fake-backend))
-                  (vcs-kit:vcs-list-worktrees
-                   (lambda (backend)
-                     (declare (ignore backend))
-                     worktrees)))
-                 (multiple-value-bind (root returned-worktrees)
-                     (nerimux/vcs::%directory-repository-root
-                      (concatenate 'string alpha "/src"))
-                   (expect (string= alpha root))
-                   (expect (eq worktrees returned-worktrees))))))
+                    ((nerimux/vcs::%make-directory-vcs-repository
+                      (lambda (requested-directory)
+                        (declare (ignore requested-directory))
+                        :fake-backend))
+                     (vcs-kit:vcs-list-worktrees
+                      (lambda (backend)
+                        (declare (ignore backend))
+                        worktrees))
+                     (nerimux/vcs:ghq-root-directory
+                      (lambda () "/tmp/ghq"))
+                     (nerimux/vcs::%path-missing-p
+                      (lambda (path)
+                        (declare (ignore path))
+                        nil)))
+                  (let* ((organizations
+                           (nerimux/vcs:resolve-directory-organizations directory))
+                         (repositories
+                           (nerimux/workspace-model:organization-repositories
+                            (first organizations)))
+                         (repository (first repositories)))
+                    (expect (= 1 (length organizations)))
+                    (expect (= 1 (length repositories)))
+                    (expect
+                     (equal
+                      (list main-path "example.test/org/repository"
+                            (list main-path linked-path))
+                      (list
+                       (nerimux/workspace-model:repository-local-path repository)
+                       (nerimux/workspace-model:repository-specification repository)
+                       (sort
+                        (mapcar (function nerimux/workspace-model:worktree-path)
+                                (nerimux/workspace-model:repository-worktrees repository))
+                        (function string<)))))))))
           (it-each
            ((nil "/tmp/first-worktree"
                  ((:path "/tmp/first-worktree" :bare-p nil)
