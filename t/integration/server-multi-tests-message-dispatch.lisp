@@ -939,9 +939,7 @@
                 (lambda (&rest arguments)
                   (push arguments calls)))
                (nerimux::%close-client-picker
-                (lambda (client)
-                  (declare (ignore client))
-                  (push :close calls))))
+                (lambda (client &key session) (declare (ignore client session)) (push :close calls))))
             (expect (nerimux::%handle-client-ui-command
                      s conn :workspace-prune "unexpected" nil))
             (expect (null calls))

@@ -42,7 +42,7 @@
       (let ((conn (%make-test-conn)) (calls nil))
         (with-stubbed-fdefinition
             ((nerimux::%open-client-picker (lambda (conn) (push :open calls) (setf (nerimux::client-conn-modal conn) :picker)))
-             (nerimux::%close-client-picker (lambda (conn) (push :close calls) (setf (nerimux::client-conn-modal conn) nil)))
+             (nerimux::%close-client-picker (lambda (conn &key session) (declare (ignore session)) (push :close calls) (setf (nerimux::client-conn-modal conn) nil)))
              (nerimux::%select-client-picker-item (lambda (session conn) (declare (ignore session)) (push :select calls) (setf (nerimux::client-conn-modal conn) nil) t))
              (nerimux::%client-enter-copy-mode (lambda (session conn) (declare (ignore session)) (setf (nerimux::client-conn-modal conn) :scrollback))))
           (expect (nerimux::%handle-client-ui-command s conn :mode nil '("picker")))

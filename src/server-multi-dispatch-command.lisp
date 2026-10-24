@@ -224,7 +224,7 @@
                        (%open-client-picker conn)
                        t)
                       ((:picker-close :picker-cancel)
-                       (%close-client-picker conn)
+                       (%close-client-picker conn :session session)
                        t)
                       ((or
                         (and (eq cmd :cancel)
@@ -233,7 +233,7 @@
                              (eq (client-conn-modal conn) :picker)))
                        (if (eq cmd :accept)
                            (%select-client-picker-item session conn)
-                           (%close-client-picker conn))
+                           (%close-client-picker conn :session session))
                        t)
                       (:picker-accept (%select-client-picker-item session conn)
                                       t)

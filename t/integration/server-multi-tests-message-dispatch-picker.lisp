@@ -105,6 +105,36 @@
           (expect (not (eq origin-pane (nerimux::client-conn-focus conn))))
           (expect (search "picker return pane is no longer available"
                           (first (nerimux::client-conn-message-log conn))))))))
+  (it "picker-cancel-ui-commands-fall-back-when-origin-pane-is-closed"
+    (dolist (command '(:picker-cancel :cancel))
+      (with-fake-session (s :npanes 2)
+        (let* ((conn (%make-test-conn))
+               (window (nerimux/session:session-active-window s))
+               (origin-pane (first (nerimux/window:window-panes window)))
+               (fallback-pane (second (nerimux/window:window-panes window)))
+               (nerimux::*clients* (list conn))
+               (nerimux::*dirty* nil))
+          (setf (nerimux::client-conn-focus conn) origin-pane
+                (nerimux::client-conn-view conn) :pane)
+          (with-stubbed-fdefinition
+              ((nerimux/vcs:workspace-organizations (lambda () nil))
+               (nerimux::%refresh-client-picker
+                (lambda (connection &rest arguments)
+                  (declare (ignore arguments))
+                  connection)))
+            (expect (nerimux::%open-client-picker conn))
+            (expect (eq fallback-pane
+                        (nerimux/window:window-remove-pane window origin-pane)))
+            (expect (null (nerimux/pane:pane-window origin-pane)))
+            (expect (eq origin-pane (nerimux::client-conn-focus conn)))
+            (expect
+             (nerimux::%handle-client-ui-command s conn command nil nil))
+            (expect (null (nerimux::client-conn-modal conn)))
+            (expect (eq :pane (nerimux::client-conn-view conn)))
+            (expect (eq fallback-pane (nerimux::client-conn-focus conn)))
+            (expect
+             (search "picker return pane is no longer available"
+                     (first (nerimux::client-conn-message-log conn)))))))))
 
   (it "picker-refresh-settles-stale-on-synchronous-error"
     (with-fake-session (s)
