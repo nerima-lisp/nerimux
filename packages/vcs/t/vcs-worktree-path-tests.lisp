@@ -690,3 +690,54 @@
                      (expect
                       (string= (namestring (nerimux/vcs:resolve-path-prefix worktree-path)) (nerimux/workspace-model:worktree-path (getf origin-candidate :worktree))))
                      (expect (null (getf upstream-candidate :worktree)))))))))
+(describe "vcs remote branch name collision"
+  (it "explains when a qualified remote branch conflicts with an untracked local branch"
+    (%call-with-worktree-path-repository
+     (lambda (repository root)
+       (let* ((source (concatenate 'string root "source/"))
+              (bare (nerimux/workspace-model:repository-local-path repository))
+              (branch-path (concatenate 'string
+                                        (nerimux/vcs:worktree-parent-directory repository)
+                                        "foo-checkout"))
+              (errors nil)
+              (created nil))
+         (%fetch-test-git source "checkout" "-b" "foo")
+         (%fetch-test-git
+          source
+          "-c" "user.name=Test"
+          "-c" "user.email=test@example.invalid"
+          "-c" "commit.gpgsign=false"
+          "-c" "core.hooksPath=/dev/null"
+          "commit" "--allow-empty" "-m" "remote foo fixture")
+         (%fetch-test-git bare "remote" "set-url" "origin" source)
+         (%fetch-test-git
+          bare "config" "--replace-all" "remote.origin.fetch"
+          "+refs/heads/*:refs/remotes/origin/*")
+         (%fetch-test-git bare "fetch" "origin" "refs/heads/foo:refs/remotes/origin/foo")
+         (%fetch-test-git bare "branch" "foo")
+         (expect
+          (string=
+           "refs/heads/foo"
+           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+                            "refs/heads/foo")))
+         (expect
+          (string=
+           ""
+           (%fetch-test-git bare "for-each-ref" "--format=%(upstream)"
+                            "refs/heads/foo")))
+         (sb-thread:join-thread
+          (nerimux/vcs:create-worktree-async
+           repository
+           :branch "origin/foo"
+           :path branch-path
+           :on-complete (lambda (worktree) (setf created worktree))
+           :on-error (lambda (condition) (push condition errors))))
+         (expect (null created))
+         (expect (first errors))
+         (expect (string= "Cannot create a worktree from remote branch origin/foo because local branch foo already exists. Select foo to use the local branch, or rename/remove it first." (princ-to-string (first errors))))
+         (expect (null (probe-file branch-path)))
+         (expect
+          (string=
+           "refs/remotes/origin/foo"
+           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+                            "refs/remotes/origin/foo"))))))))

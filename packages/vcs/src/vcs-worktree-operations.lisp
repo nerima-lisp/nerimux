@@ -493,7 +493,11 @@ false DRY-RUN once a user has explicitly confirmed the operation."
         (error creation-error)))))
 
 (defun %read-worktree-branch-candidates (repository)
-  "Return branch candidates, associating remote checkouts by exact upstream ref."
+  "Return branch candidates as plists with these keys:
+:BRANCH is the short branch name; :KIND is :LOCAL or :REMOTE; :REF is the
+full Git ref; :REMOTE is the remote name (or NIL for local branches); and
+:WORKTREE is the checked-out worktree, or NIL when no matching checkout exists.
+Remote checkouts are associated only when their upstream is the exact selected ref."
   (unless repository
     (error "A repository is required to list branch candidates."))
   (let* ((repository (list-repository-worktrees repository))
@@ -659,6 +663,12 @@ false DRY-RUN once a user has explicitly confirmed the operation."
                      (eq :remote (getf selected-candidate :kind))))
                (new-branch-p (or (null selected-candidate) remote-candidate-p)))
           (unless worktree
+            (when (and remote-candidate-p
+                       (find-if (lambda (candidate)
+                                  (and (eq :local (getf candidate :kind))
+                                       (string= selected-branch (getf candidate :branch))))
+                                candidates))
+              (error (format nil "Cannot create a worktree from remote branch ~A/~A because local branch ~A already exists. Select ~A to use the local branch, or rename/remove it first." (getf selected-candidate :remote) selected-branch selected-branch selected-branch)))
             (if new-branch-p
                 (%create-worktree-from-new-branch
                  repository
