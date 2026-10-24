@@ -86,12 +86,19 @@
 
 (defun %status-window-tab (window focus-pane)
   "WINDOW's locator: `win 1:feature/x · pane 1 2* 3!`, plus a zoom marker when
-   the window is zoomed. WINDOW-NAME is the label assigned when WINDOW was
-   created."
+   the window is zoomed."
   (format nil
           "~A ·~{~A~}~@[ ~A~]"
           (%status-wrap
-           (format nil "win ~D:~A" (window-id window) (window-name window))
+           (format nil
+                   "win ~D:~A"
+                   (window-id window)
+                   (remove-if
+                    (lambda (character)
+                      (let ((code (char-code character)))
+                        (or (< code 32)
+                            (<= 127 code 159))))
+                    (window-name window)))
            +sgr-muted+)
           (cons (%status-wrap " pane" +sgr-muted+)
                 (mapcar

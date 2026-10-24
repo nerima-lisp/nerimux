@@ -99,6 +99,14 @@
       (expect (string= "win 1:feature/x · pane 1 2* 3!" (strip-sgr tab)))
       (expect tab :to-contain-sgr nerimux/renderer::+sgr-warn+)
       (expect tab :to-contain-sgr nerimux/renderer::+sgr-accent-bold+)))
+  (it "removes C0 and C1 controls from the window label"
+    (let* ((pane (nerimux/pane:make-pane :id 1 :fd -1))
+           (window (nerimux/window:make-window
+                    :id 1
+                    :name (format nil "feature/~C[52c~C" (code-char 27) (code-char #x9b))
+                    :panes (list pane)))
+           (tab (nerimux/renderer::%status-window-tab window pane)))
+      (expect (string= "win 1:feature/[52c · pane 1*" (strip-sgr tab)))))
 
   (it "keeps listing every pane, plus a zoom marker, while the window is zoomed"
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
