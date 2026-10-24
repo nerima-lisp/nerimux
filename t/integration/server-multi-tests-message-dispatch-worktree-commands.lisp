@@ -459,9 +459,16 @@
     (let* ((root (format nil "/tmp/nerimux-worktree-create-symlink-~D" (sb-posix:getpid)))
            (parent (format nil "~A/parent/" root))
            (outside (format nil "~A/outside/" root))
+           (outside-existing (format nil "~Aexisting/" outside))
            (link (format nil "~Alink" parent))
            (candidate (format nil "~A/new-worktree" link))
-           (accepted-candidate (format nil "~A/new-worktree" parent))
+           (intermediate-candidate
+             (format nil "~A/existing/new-worktree" link))
+           (internal-target (format nil "~Atarget/" parent))
+           (internal-link (format nil "~Ainternal-link" parent))
+           (internal-candidate (format nil "~A/new-worktree" internal-link))
+           (canonical-internal-candidate nil)
+           (accepted-candidate (format nil "~Anew-worktree" parent))
            (organization
              (nerimux/workspace-model:make-organization
               :id "org-symlink" :host "github.com" :name "team-symlink"))
@@ -478,8 +485,13 @@
       (unwind-protect
            (progn
              (ensure-directories-exist parent)
-             (ensure-directories-exist outside)
+             (ensure-directories-exist outside-existing)
+             (ensure-directories-exist internal-target)
              (sb-posix:symlink outside link)
+             (sb-posix:symlink "target/" internal-link)
+             (setf canonical-internal-candidate
+                   (format nil "~Anew-worktree"
+                           (namestring (truename internal-target))))
              (nerimux/workspace-model:organization-add-repository organization repository)
              (with-stubbed-fdefinition
                  ((nerimux/vcs:vcs-package-available-p (lambda () t))
@@ -494,12 +506,36 @@
                (nerimux::%set-client-selected-tree-object conn repository)
                (expect (nerimux::%handle-client-ui-command
                         nil conn :wt-create nil
-                        (list "--branch" "feature/symlink" "--path" candidate
-                              "--confirm")))
+                        (list "--branch" "feature/symlink-intermediate" "--path"
+                              intermediate-candidate "--confirm")))
                (expect (null call))
                (expect (search "path must stay under the repository"
                                (first (nerimux::client-conn-message-log conn))))
                (setf call nil)
+               (expect (nerimux::%handle-client-ui-command
+                        nil conn :wt-create nil
+                        (list "--branch" "feature/symlink-missing" "--path"
+                              candidate "--confirm")))
+               (expect (null call))
+               (expect (search "path must stay under the repository"
+                               (first (nerimux::client-conn-message-log conn))))
+               (setf call nil)
+               (expect (nerimux::%handle-client-ui-command
+                        nil conn :wt-create nil
+                        (list "--branch" "feature/symlink-internal" "--path"
+                              internal-candidate "--confirm")))
+               (expect (equal canonical-internal-candidate
+                              (getf (cdr call) :path)))
+               (setf call nil)
+               (sb-posix:unlink internal-link)
+               (sb-posix:symlink "missing/../link" internal-link)
+               (expect (nerimux::%handle-client-ui-command
+                        nil conn :wt-create nil
+                        (list "--branch" "feature/symlink-missing-parent" "--path"
+                              internal-candidate "--confirm")))
+               (expect (null call))
+               (expect (search "path must stay under the repository"
+                               (first (nerimux::client-conn-message-log conn))))
                (expect (nerimux::%handle-client-ui-command
                         nil conn :wt-create nil
                         (list "--branch" "feature/missing" "--path"
@@ -509,7 +545,10 @@
               (fdefinition 'nerimux/vcs:worktree-parent-directory) parent-directory
               (fdefinition 'nerimux/vcs:create-worktree-async) create)
         (ignore-errors (sb-posix:unlink link))
+        (ignore-errors (sb-posix:unlink internal-link))
+        (ignore-errors (sb-posix:rmdir outside-existing))
         (ignore-errors (sb-posix:rmdir outside))
+        (ignore-errors (sb-posix:rmdir internal-target))
         (ignore-errors (sb-posix:rmdir (format nil "~A/parent" root)))
         (ignore-errors (sb-posix:rmdir root)))))
 
