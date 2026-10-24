@@ -440,7 +440,7 @@
                (code-char code))))))
 
 (describe "vcs clone error formatting"
-  (it "joins multiline Git errors with semicolons"
+  (it "redacts credentials, joins clone errors, and truncates at 180 characters"
     (expect
      (string=
       "fatal: x; hint: y"
@@ -448,10 +448,17 @@
        nil
        (format nil "fatal: x~Chint: y" (code-char 10))
        128)))
+    (progn
+    (expect (string= "fatal: x; hint: y" (nerimux/vcs::%clone-error-reason nil (format nil "fatal: x~C~Chint: y" (code-char 13) (code-char 10)) 128)))
     (expect
      (string=
-      "fatal: x; hint: y"
+      "fatal: https://[redacted]@example.invalid/repo; fetch failed"
       (nerimux/vcs::%clone-error-reason
        nil
-       (format nil "fatal: x~C~Chint: y" (code-char 13) (code-char 10))
-       128)))))
+       (format nil "fatal: https://alice:secret@example.invalid/repo~Cfetch failed" #\Newline)
+       128)))
+    (let ((reason
+            (nerimux/vcs::%clone-error-reason
+             nil (make-string 181 :initial-element #\x) 128)))
+      (expect (= 180 (length reason)))
+      (expect (string= (make-string 180 :initial-element #\x) reason))))))

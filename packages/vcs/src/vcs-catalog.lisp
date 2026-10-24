@@ -14,7 +14,11 @@
   "TEXT with terminal and bidi controls removed, except Newline and Tab.
 
    Newline and Tab stay because git multi-line output powers the diff pager
-   and process log."
+   and process log.
+
+   C1 is excluded because the client wire uses UTF-8: U+009B arrives as a
+   character, and some terminal decoders interpret it as the 8-bit CSI
+   introducer. Filtering C0 alone would block ESC-[ but allow this equivalent."
   (if (stringp text)
       (with-output-to-string (out)
         (loop for character across text
