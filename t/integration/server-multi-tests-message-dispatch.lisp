@@ -555,6 +555,18 @@
         (expect (eq :help (nerimux::client-conn-modal conn)))
         (nerimux::%handle-multi-key-message s conn #(113))
         (expect (null (nerimux::client-conn-modal conn))))))
+  (it "help-modal-prefix-c-q-c-q-clears-modal"
+    (with-fake-session (s)
+      (let ((conn (%make-test-conn)))
+        (nerimux::%handle-multi-key-message s conn #(63))
+        (nerimux::%handle-multi-key-message s conn #(107))
+        (expect (eq :help (nerimux::client-conn-modal conn)))
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (expect (eq :help (nerimux::client-conn-modal conn)))
+        (expect (nerimux::client-conn-ui-prefix-p conn))
+        (nerimux::%handle-multi-key-message s conn #(17))
+        (expect (null (nerimux::client-conn-modal conn)))
+        (expect (not (nerimux::client-conn-ui-prefix-p conn))))))
 
   (it "?-then-k-also-opens-from-the-repolist-view-and-enter-or-esc-close-it"
     (with-fake-session (s)
