@@ -89,14 +89,14 @@
 
 (describe "renderer-suite/statusbar-workspace-pane-tabs"
 
-  (it "marks only the unread pane's tab with ! in win 1 · pane 1 2* 3!"
+  (it "marks only the unread pane's tab with ! in win 1:feature/x · pane 1 2* 3!"
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
            (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
            (pane-3 (nerimux/pane:make-pane :id 3 :fd -1 :unread-output-p t))
            (window (nerimux/window:make-window
-                    :id 1 :name "w" :panes (list pane-1 pane-2 pane-3)))
+                    :id 1 :name "feature/x" :panes (list pane-1 pane-2 pane-3)))
            (tab (nerimux/renderer::%status-window-tab window pane-2)))
-      (expect (string= "win 1 · pane 1 2* 3!" (strip-sgr tab)))
+      (expect (string= "win 1:feature/x · pane 1 2* 3!" (strip-sgr tab)))
       (expect tab :to-contain-sgr nerimux/renderer::+sgr-warn+)
       (expect tab :to-contain-sgr nerimux/renderer::+sgr-accent-bold+)))
 
@@ -104,7 +104,7 @@
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
            (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
            (window (nerimux/window:make-window
-                    :id 4 :name "w" :panes (list pane-1 pane-2))))
+                    :id 4 :name "feature/zoom" :panes (list pane-1 pane-2))))
       (setf (nerimux/window:window-zoom-tree window)
             (nerimux/layout:make-layout-split
              :h
@@ -112,7 +112,7 @@
              (nerimux/layout:make-layout-leaf pane-2))
             (nerimux/window:window-panes window) (list pane-1)
             (nerimux/window:window-zoom-p window) t)
-      (expect (string= "win 4 · pane 1* 2 [zoom]"
+      (expect (string= "win 4:feature/zoom · pane 1* 2 [zoom]"
                        (strip-sgr
                         (nerimux/renderer::%status-window-tab window pane-1))))))
 
@@ -131,15 +131,15 @@
   (it "lists every window of the focused pane's worktree in the middle block, not just its own"
     (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
            (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
-           (window-1 (nerimux/window:make-window :id 1 :name "w1" :panes (list pane-1)))
-           (window-2 (nerimux/window:make-window :id 2 :name "w2" :panes (list pane-2)))
+           (window-1 (nerimux/window:make-window :id 1 :name "feature/main" :panes (list pane-1)))
+           (window-2 (nerimux/window:make-window :id 2 :name "feature/main (2)" :panes (list pane-2)))
            (worktree (nerimux/workspace-model:make-worktree
                       :id "wt-multi-window" :path "/repo/wt" :branch "main")))
       (setf (nerimux/pane:pane-window pane-1) window-1
             (nerimux/pane:pane-window pane-2) window-2)
       (nerimux/pane:worktree-add-pane worktree pane-1)
       (nerimux/pane:worktree-add-pane worktree pane-2)
-      (expect (string= "win 1 · pane 1*  win 2 · pane 2"
+      (expect (string= "win 1:feature/main · pane 1*  win 2:feature/main (2) · pane 2"
                        (strip-sgr
                         (nerimux/renderer::%status-middle-text pane-1))))))
 
@@ -177,7 +177,7 @@
                               (not (find #\… line))
                               (not (search head line)))
                      (setf dropped cols))
-                   (when (and (null no-tabs) (not (search "win 1 ·" line)))
+                   (when (and (null no-tabs) (not (search "win 1:" line)))
                      (setf no-tabs cols))
                    (when (and (null no-repository)
                               (not (search "github.com/team/status" line)))
