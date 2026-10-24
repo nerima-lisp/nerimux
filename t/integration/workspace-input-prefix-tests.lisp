@@ -186,6 +186,26 @@
         (expect (equalp (list (list 9999 #(17))) writes))
         (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (null (nerimux::client-conn-ui-prefix-p conn))))))
+  (it "prefix-q-sends-rebound-prefix-byte"
+    (with-minimal-session (pane win sess)
+      (declare (ignorable win))
+      (setf (nerimux/pane:pane-fd pane) 9999)
+      (let* ((conn (%make-test-conn))
+             (writes nil)
+             (orig (fdefinition (quote nerimux::pty-write))))
+        (setf (nerimux::client-conn-workspace-prefix-code conn) 113)
+        (nerimux::%set-client-focus conn pane)
+        (unwind-protect
+             (progn
+               (setf (fdefinition (quote nerimux::pty-write))
+                     (lambda (fd bytes) (push (list fd bytes) writes)))
+               (nerimux::%handle-multi-key-message sess conn #(113))
+               (expect (nerimux::client-conn-ui-prefix-p conn))
+               (nerimux::%handle-multi-key-message sess conn #(113)))
+          (setf (fdefinition (quote nerimux::pty-write)) orig))
+        (expect (equalp (list (list 9999 #(113))) writes))
+        (expect (eq :pane (nerimux::client-conn-view conn)))
+        (expect (null (nerimux::client-conn-ui-prefix-p conn))))))
 
   (it "r4-4-prefix-w-opens-overview-directly-and-repeatedly-for-the-focused-worktree"
     (with-minimal-session (pane win sess)
