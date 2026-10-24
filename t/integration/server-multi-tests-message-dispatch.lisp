@@ -698,8 +698,11 @@
     (let* ((healthy-path (%vcs-operations-existing-path))
            (failing-path
              (namestring
-              (merge-pathnames "nerimux-bug2-failing-status/"
-                               (host-kit:temporary-directory))))
+              (merge-pathnames
+               (format nil "nerimux-bug2-failing-status-~D-~D/"
+                       (get-universal-time)
+                       (sb-posix:getpid))
+               (host-kit:temporary-directory))))
            (healthy-entry
              (vcs-kit:make-ghq-repository-entry
               :specification "bug2-host/team/healthy" :path healthy-path))
@@ -715,6 +718,12 @@
             (nerimux/vcs::*workspace-organizations* nil)
             (nerimux::*workspace-file-diffs* (make-hash-table :test #'equal))
             (nerimux::*workspace-file-diffs-order* nil)
+            (nerimux::*last-selected-worktree-token* nil)
+            (nerimux::*workspace-collapsed-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*workspace-expanded-node-ids* (make-hash-table :test #'equal))
+            (nerimux::*workspace-operation-jobs* (make-hash-table :test #'equal))
+            (nerimux::*workspace-catalog-loaded-p* nil)
+            (nerimux::*workspace-scan-progress* nil)
             (conn (nerimux::%make-client-conn)))
         (unwind-protect
              (progn
@@ -737,16 +746,26 @@
                             (error "synthetic status failure for BUG-2")
                             (%vcs-operations-status-snapshot
                              :branch-head "head" :ahead 0 :behind 0)))))
-                 (nerimux::%refresh-client-picker conn)
-                 (let ((deadline (+ (get-internal-real-time)
-                                    (* 2 internal-time-units-per-second))))
-                   (loop until (and (plusp (length (nerimux/vcs:workspace-organizations)))
-                                    (zerop (hash-table-count
-                                            nerimux::*workspace-refreshing-ids*)))
-                         while (< (get-internal-real-time) deadline)
+                 (let ((refresh-finished nil)
+                       (refresh-error nil))
+                   (setf nerimux::*clients* (list conn))
+                   (nerimux::%refresh-client-picker
+                    conn
+                    :on-complete
+                    (lambda (organizations)
+                      (declare (ignore organizations))
+                      (setf refresh-finished t))
+                    :on-error
+                    (lambda (condition)
+                      (setf refresh-error condition
+                            refresh-finished t)))
+                   (loop until (or refresh-finished
+                                   nerimux::*workspace-catalog-loaded-p*)
                          do (nerimux::%drain-main-thread-callbacks)
                             (sleep 0.01))
-                   (nerimux::%drain-main-thread-callbacks))
+                   (nerimux::%drain-main-thread-callbacks)
+                   (expect refresh-finished)
+                   (expect (null refresh-error)))
                  (expect (plusp (length (nerimux/vcs:workspace-organizations))))
                  (expect (zerop (hash-table-count nerimux::*workspace-refreshing-ids*)))
                  (let* ((organizations (nerimux/vcs:workspace-organizations))
