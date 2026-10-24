@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 1 )) || [[ -z ${1:-} ]]; then
-  printf 'usage: %s OUTPUT_ROOT\n' "${0##*/}" >&2
-  exit 64
-fi
-
-output_root=$1
-mkdir -p "$output_root"
-output_root=$(cd "$output_root" && pwd -P)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+source "$SCRIPT_DIR/../path-utils.sh"
+LIVE_REPO_ROOT="$SCRIPT_DIR/../../.."
+output_root=$(live_fixture_output_parent "$@")
 fixture_root="$output_root/F-agents"
 
 if [[ -L $fixture_root || ( -e $fixture_root && ! -d $fixture_root ) ]]; then

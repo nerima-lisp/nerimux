@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 1 )) || [[ -z ${1:-} ]]; then
-  printf 'usage: %s OUTPUT_ROOT\n' "${0##*/}" >&2
-  exit 64
-fi
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+source "$SCRIPT_DIR/../path-utils.sh"
+LIVE_REPO_ROOT="$SCRIPT_DIR/../../.."
+output_root=$(live_fixture_output_parent "$@")
 if ! command -v jj >/dev/null 2>&1; then
   printf 'jj is required to generate F-clone-src\n' >&2
   exit 127
 fi
 
-output_root=$1
-mkdir -p "$output_root"
-output_root=$(cd "$output_root" && pwd -P)
 fixture_root="$output_root/F-clone-src"
 
 if [[ -L $fixture_root || ( -e $fixture_root && ! -d $fixture_root ) ]]; then

@@ -2,7 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-LIVE_ROOT=${LIVE_BASE_TMPDIR:-${TMPDIR:-/tmp}/nmx-live}
+source "$SCRIPT_DIR/path-utils.sh"
+LIVE_REPO_ROOT=$(cd -- "$SCRIPT_DIR/../.." && pwd -P)
+LIVE_ROOT=$(live_external_path \
+  "${LIVE_BASE_TMPDIR:-${TMPDIR:-/tmp}/nmx-live}" \
+  "$LIVE_REPO_ROOT" 'lane output root')
 ORIGINAL_PATH=${PATH:-/usr/bin:/bin}
 TMUX_BIN=$(type -P tmux || true)
 [[ -n $TMUX_BIN ]] || { printf 'harness: tmux is required\n' >&2; exit 127; }
@@ -60,6 +64,7 @@ prepare_lane() {
   local lane=$1 fixture_root=$2 dir ghq_root
   dir=$(lane_dir "$lane")
   ghq_root=${GHQ_ROOT:-$fixture_root/ghq}
+  ghq_root=$(live_external_path "$ghq_root" "$LIVE_REPO_ROOT" 'GHQ_ROOT') || fail "invalid GHQ_ROOT: $ghq_root"
   mkdir -p "$dir/home" "$dir/tmp" "$dir/state" "$dir/tmux" \
     "$dir/evidence" "$dir/evidence/snapshots" "$dir/evidence/raw" "$ghq_root"
   ENV_ARGS=(
@@ -207,12 +212,13 @@ start_app() {
   prepare_lane "$lane" "$fixture_root"
   ensure_self_check "$lane"
   socket=$(app_socket "$lane")
-  printf -v pane_command '/bin/bash %q %q attach' "$SCRIPT_DIR/launch.sh" "$binary"
+  printf -v pane_command '/bin/bash %q %q attach %q' \
+    "$SCRIPT_DIR/launch.sh" "$binary" "$dir/evidence/attach-stderr.log"
   if run_tmux "$lane" "$fixture_root" "$socket" has-session -t app >/dev/null 2>&1; then
     pane_dead=$(run_tmux "$lane" "$fixture_root" "$socket" display-message -p -t app:0.0 '#{pane_dead}')
     if [[ $pane_dead == 1 ]]; then
       printf '%s\n' "$binary" > "$dir/state/nerimux-bin"
-      run_tmux "$lane" "$fixture_root" "$socket" respawn-pane -k -t app:0.0 "$pane_command"
+      run_tmux "$lane" "$fixture_root" "$socket" respawn-pane -k -t app:0.0 -c "$dir" "$pane_command"
       run_tmux "$lane" "$fixture_root" "$socket" set-window-option -t app:0 -g remain-on-exit on
       printf 'reattached lane %s; evidence: %s/evidence\n' "$lane" "$dir"
     else
@@ -221,7 +227,7 @@ start_app() {
     return 0
   fi
   printf '%s\n' "$binary" > "$dir/state/nerimux-bin"
-  run_tmux "$lane" "$fixture_root" "$socket" new-session -d -s app -x 120 -y 40 "$pane_command"
+  run_tmux "$lane" "$fixture_root" "$socket" new-session -d -s app -x 120 -y 40 -c "$dir" "$pane_command"
   run_tmux "$lane" "$fixture_root" "$socket" set-window-option -t app:0 -g remain-on-exit on
   printf 'started lane %s; evidence: %s/evidence\n' "$lane" "$dir"
 }
