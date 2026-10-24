@@ -307,6 +307,7 @@
    when no agent has ever run here."
   (let ((state (nerimux/pane:worktree-agent-state worktree)))
     (cond
+      ((eq state :exited) "agent EXITED")
       ((nerimux/workspace-model:worktree-waiting-p worktree) "agent WAITING")
       ((eq state :none) nil)
       (t (format nil "agent ~A" state)))))

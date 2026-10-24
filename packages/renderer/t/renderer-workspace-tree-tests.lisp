@@ -764,6 +764,16 @@
           (nerimux/pane:make-pane :agent-kind :claude :process-exited-p t))
         (expect (string= "exited agent EXITED dirty"
                          (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
+  (it "shows exited agent lifecycle when process exit also marks it waiting"
+      (let* ((worktree (nerimux/workspace-model:make-worktree :status t))
+             (agent (nerimux/pane:make-pane :fd 10 :agent-kind :codex)))
+        (nerimux/pane:worktree-add-pane worktree agent)
+        (nerimux/pane:pane-mark-process-exit agent :status 1)
+        (expect (nerimux/workspace-model:worktree-waiting-p worktree))
+        (expect (eq :exited (nerimux/pane:worktree-agent-state worktree)))
+        (expect
+         (search "exited agent EXITED"
+                 (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
   (it "keeps a running agent visible when the workspace is completed"
       (let ((worktree (nerimux/workspace-model:make-worktree :status t :completed-p t)))
         (nerimux/pane:worktree-add-pane worktree
