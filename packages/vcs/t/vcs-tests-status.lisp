@@ -227,6 +227,8 @@
                           (nerimux/workspace-model:worktree-additions worktree)))
                (expect (= 4
                           (nerimux/workspace-model:worktree-deletions worktree))))))
+          ;; Git's -<behind> field is signed in the porcelain stream, while
+          ;; nerimux's worktree-behind value is a nonnegative count.
           (it
  "%read-worktree-status-at applies a negative behind snapshot as a positive worktree-behind count"
  (let* ((path (namestring (host-kit:temporary-directory)))

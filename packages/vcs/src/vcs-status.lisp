@@ -235,6 +235,8 @@ once reads it exactly once and passes the same reading down (see
              :dirty-p (not (null entries))
              :conflict-p (not (null (some #'%status-entry-conflict-p entries)))
              :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
+             ;; cl-vcs-kit currently copies Git's signed -<behind> field into
+             ;; its backend-neutral snapshot; nerimux stores the count.
              :behind (abs (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0))
              :additions additions
              :deletions deletions
