@@ -138,9 +138,35 @@ for my $f (@files) {
         }
     }
     # Names introduced locally still count as defined for this check.
-    while ($text =~ /\((?:flet|labels|macrolet)\s*\(\s*\((%[^\s\(\)]+)/gs) {
-        my $n = lc $1;
-        $def{$n} //= { min => 0, max => undef };
+    while ($text =~ /\((?:flet|labels|macrolet)\b\s*\(/gs) {
+        my $entry = pos($text);
+        my $len = length($text);
+        while ($entry < $len) {
+            $entry++ while $entry < $len && substr($text, $entry, 1) =~ /\s/;
+            last unless substr($text, $entry, 1) eq '(';
+            my $entry_open = $entry;
+            my $name_start = $entry_open + 1;
+            $name_start++ while $name_start < $len
+                && substr($text, $name_start, 1) =~ /\s/;
+            if (substr($text, $name_start) =~ /\A(%[^\s\(\)]+)/) {
+                $def{lc $1} //= { min => 0, max => undef };
+            }
+
+            my ($entry_depth, $entry_end) = (0, undef);
+            for (my $i = $entry_open; $i < $len; $i++) {
+                my $c = substr($text, $i, 1);
+                $entry_depth++ if $c eq '(';
+                if ($c eq ')') {
+                    $entry_depth--;
+                    if ($entry_depth == 0) {
+                        $entry_end = $i;
+                        last;
+                    }
+                }
+            }
+            last unless defined $entry_end;
+            $entry = $entry_end + 1;
+        }
     }
 }
 
