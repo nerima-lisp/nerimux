@@ -18,7 +18,7 @@
         (and text
              (every
               (lambda (character)
-                (>= (char-code character) 32))
+                (not (nerimux/text:control-character-p character)))
               text)
              (< (length query) +max-tree-filter-length+))
       (setf (client-conn-tree-filter conn) (concatenate 'string query text)

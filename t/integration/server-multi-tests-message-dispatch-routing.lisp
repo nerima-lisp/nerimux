@@ -98,8 +98,10 @@
         (expect (nerimux/terminal:screen-copy-mode-p screen))
         (nerimux::%handle-multi-key-message s conn #(47))
         (expect (eq :command (nerimux::client-conn-modal conn)))
-        (expect (string= "search-forward "
-                         (nerimux::client-conn-command-buffer conn)))
+        (progn
+          (expect (string= "search-forward " (nerimux::client-conn-command-buffer conn)))
+          (let ((probe (%make-test-conn)))
+            (expect (null (nerimux::%client-command-buffer-append probe #(127))))))
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "needle" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(13))

@@ -119,7 +119,10 @@
               (nerimux::client-conn-tree-scroll conn) 4)
         (expect (null (nerimux::%client-tree-filter-buffer-delete-character conn)))
         (expect (null (nerimux::%client-tree-filter-buffer-append conn #(1))))
-        (expect (null (nerimux::%client-tree-filter-buffer-append conn #(10))))
+        (progn
+          (expect (null (nerimux::%client-tree-filter-buffer-append conn #(10))))
+          (let ((probe (%make-test-conn)))
+            (expect (null (nerimux::%client-tree-filter-buffer-append probe #(127))))))
         (expect (null (nerimux::client-conn-tree-filter conn)))
         (setf (nerimux::client-conn-tree-filter conn)
               (make-string nerimux::+max-tree-filter-length+

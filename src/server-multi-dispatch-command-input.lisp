@@ -62,7 +62,7 @@
         (and text
              (every
               (lambda (character)
-                (>= (char-code character) 32))
+                (not (nerimux/text:control-character-p character)))
               text))
       (setf (client-conn-command-buffer conn) (concatenate 'string
                                                            (client-conn-command-buffer

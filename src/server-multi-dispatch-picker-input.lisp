@@ -56,7 +56,7 @@
              (handler-case
                  (cl-codec-kit:octets-to-string payload :encoding :utf-8)
                (cl-codec-kit:decode-error () nil))))))
-    (when (and text (every (lambda (character) (>= (char-code character) 32)) text))
+    (when (and text (every (lambda (character) (not (nerimux/text:control-character-p character))) text))
       (let* ((query (client-conn-picker-query conn))
              (remaining (- nerimux/picker::+picker-regex-query-length-limit+
                            (length query))))

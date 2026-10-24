@@ -361,8 +361,10 @@
                        conn #(194 32))))
         (expect (null (nerimux::%append-client-picker-query-octets
                        conn 42)))
-        (expect (null (nerimux::%append-client-picker-query-octets
-                       conn #(1))))
+        (progn
+          (expect (null (nerimux::%append-client-picker-query-octets conn #(1))))
+          (let ((probe (%make-test-conn)))
+            (expect (null (nerimux::%append-client-picker-query-octets probe #(#xE2 #x80 #xAE))))))
         (expect (null (nerimux::%delete-client-picker-query-character conn)))
         (setf (nerimux::client-conn-picker-items conn) nil
               (nerimux::client-conn-picker-index conn) 9)
