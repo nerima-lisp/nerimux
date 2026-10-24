@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+LIVE_ROOT=${LIVE_BASE_TMPDIR:-${TMPDIR:-/tmp}/nmx-live}
+ORIGINAL_PATH=${PATH:-/usr/bin:/bin}
+TMUX_BIN=$(type -P tmux || true)
+[[ -n $TMUX_BIN ]] || { printf 'harness: tmux is required\n' >&2; exit 127; }
+
+usage() {
+  cat <<'USAGE'
+usage:
+  harness start <lane> [nerimux-binary]
+  harness keys <lane> <key>...
+  harness wait-for <lane> <extended-regex> <seconds>
+  harness snap <lane> <case-id>
+  harness raw <lane> [nerimux-binary]
+  harness resize <lane> <columns> <rows>
+  harness stop <lane> [nerimux-binary]
+  harness self-check <lane>
+
+Set LIVE_FIXTURE_ROOT to a generated fixture directory. NERIMUX_BIN selects
+the executable for start, raw, and stop; a binary path may also be passed.
+USAGE
+}
+
+fail() {
+  printf 'harness: %s\n' "$*" >&2
+  exit 2
+}
+
+check_lane() {
+  [[ $1 =~ ^L[1-8]$ ]] || fail "invalid lane: $1"
+}
+
+lane_dir() {
+  printf '%s/%s' "$LIVE_ROOT" "$1"
+}
+
+default_fixture_root() {
+  printf '%s/fixtures/F-bare' "$(lane_dir "$1")"
+}
+
+absolute_executable() {
+  local requested=$1 candidate dir
+  if [[ $requested == */* ]]; then
+    candidate=$requested
+    if [[ -d $candidate && -x $candidate/bin/nerimux ]]; then
+      candidate=$candidate/bin/nerimux
+    fi
+  else
+    candidate=$(type -P "$requested" || true)
+  fi
+  [[ -n $candidate && -x $candidate ]] || fail "not an executable: $requested"
+  dir=$(cd -- "$(dirname -- "$candidate")" && pwd -P) || fail "cannot resolve binary: $requested"
+  printf '%s/%s' "$dir" "$(basename -- "$candidate")"
+}
+
+prepare_lane() {
+  local lane=$1 fixture_root=$2 dir ghq_root
+  dir=$(lane_dir "$lane")
+  ghq_root=${GHQ_ROOT:-$fixture_root/ghq}
+  mkdir -p "$dir/home" "$dir/tmp" "$dir/state" "$dir/tmux" \
+    "$dir/evidence" "$dir/evidence/snapshots" "$dir/evidence/raw" "$ghq_root"
+  ENV_ARGS=(
+    "HOME=$dir/home"
+    "TMPDIR=$dir/tmp"
+    "GHQ_ROOT=$ghq_root"
+    "XDG_STATE_HOME=$dir/state"
+    "SHELL=/bin/bash"
+    "PATH=$fixture_root/bin:$ORIGINAL_PATH"
+    "TMUX_TMPDIR=$dir/tmux"
+    "TERM=${LIVE_TERM:-xterm-256color}"
+    "LANG=${LIVE_LANG:-C.UTF-8}"
+  )
+  if [[ -n ${GIT_CONFIG_GLOBAL:-} ]]; then
+    ENV_ARGS+=("GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL")
+  fi
+}
+
+run_clean() {
+  env -i "${ENV_ARGS[@]}" "$@"
+}
+
+app_socket() {
+  printf 'nmx-%s' "$1"
+}
+
+run_tmux() {
+  local lane=$1 fixture_root=$2 socket=$3
+  shift 3
+  prepare_lane "$lane" "$fixture_root"
+  run_clean "$TMUX_BIN" -L "$socket" "$@"
+}
+
+wait_for_on_socket() {
+  local lane=$1 fixture_root=$2 socket=$3 session=$4 pattern=$5 seconds=$6
+  local deadline=$((SECONDS + seconds)) capture
+  while :; do
+    if capture=$(run_tmux "$lane" "$fixture_root" "$socket" \
+      capture-pane -p -t "$session:0.0" 2>/dev/null) &&
+      printf '%s\n' "$capture" | grep -E -q -- "$pattern"; then
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      printf 'harness: wait-for timed out after %s seconds: %s\n' "$seconds" "$pattern" >&2
+      return 1
+    fi
+    sleep 0.2
+  done
+}
+
+wait_for() {
+  local lane=$1 pattern=$2 seconds=$3 fixture_root
+  check_lane "$lane"
+  [[ $seconds =~ ^[1-9][0-9]*$ ]] || fail "seconds must be a positive integer"
+  grep -E -q -- "$pattern" </dev/null 2>/dev/null || {
+    local status=$?
+    (( status == 1 )) || fail "invalid extended regular expression: $pattern"
+  }
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  wait_for_on_socket "$lane" "$fixture_root" "$(app_socket "$lane")" app "$pattern" "$seconds"
+}
+
+shell_escaped_sentinel() {
+  local value=$1 result= char i
+  for ((i = 0; i < ${#value}; i++)); do
+    char=${value:i:1}
+    printf -v octal '%03o' "'$char"
+    result+="\\$octal"
+  done
+  printf '%s' "$result"
+}
+
+run_self_check() {
+  local lane=$1 dir fixture_root socket positive negative command marker evidence
+  check_lane "$lane"
+  dir=$(lane_dir "$lane")
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  prepare_lane "$lane" "$fixture_root"
+  socket="nmx-${lane}-selfcheck"
+  mkdir -p "$dir/tmux-selfcheck"
+  marker="$dir/state/self-check.ok"
+  evidence="$dir/evidence/self-check"
+  mkdir -p "$evidence"
+  if run_tmux "$lane" "$fixture_root" "$socket" new-session -d -s check -x 100 -y 24 \
+    '/bin/bash --noprofile --norc -i' >/dev/null; then
+    positive="NMX_HARNESS_OK_${BASHPID}"
+    negative="NMX_HARNESS_NEVER_${BASHPID}"
+    command="printf '%b\\n' '$(shell_escaped_sentinel "$positive")'"
+    run_tmux "$lane" "$fixture_root" "$socket" send-keys -t check:0.0 "$command" Enter
+    if ! wait_for_on_socket "$lane" "$fixture_root" "$socket" check "$positive" 5 \
+      2> "$evidence/positive-wait.log"; then
+      run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null 2>&1 || true
+      return 1
+    fi
+    run_tmux "$lane" "$fixture_root" "$socket" capture-pane -p -t check:0.0 \
+      > "$evidence/pane.txt"
+    if wait_for_on_socket "$lane" "$fixture_root" "$socket" check "$negative" 1 \
+      2> "$evidence/negative-wait.log"; then
+      printf 'harness: wait-for unexpectedly matched absent text\n' >&2
+      run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null 2>&1 || true
+      return 1
+    fi
+    grep -Fq 'timed out after 1 seconds' "$evidence/negative-wait.log" || {
+      printf 'harness: negative wait did not fail by timeout\n' >&2
+      run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null 2>&1 || true
+      return 1
+    }
+    run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null
+    printf 'positive=%s\nnegative=timeout\n' "$positive" > "$evidence/result.txt"
+    printf 'passed\n' > "$marker"
+    printf 'self-check %s: passed\n' "$lane"
+  else
+    printf 'harness: could not start self-check session for %s\n' "$lane" >&2
+    return 1
+  fi
+}
+
+ensure_self_check() {
+  local lane=$1
+  [[ -f $(lane_dir "$lane")/state/self-check.ok ]] || run_self_check "$lane"
+}
+
+start_app() {
+  local lane=$1 requested=${2:-${NERIMUX_BIN:-nerimux}} binary fixture_root dir socket pane_command pane_dead
+  check_lane "$lane"
+  binary=$(absolute_executable "$requested")
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  [[ -d $fixture_root ]] || fail "fixture root does not exist: $fixture_root"
+  [[ -d ${GHQ_ROOT:-$fixture_root/ghq} ]] || fail "GHQ root does not exist: ${GHQ_ROOT:-$fixture_root/ghq}"
+  dir=$(lane_dir "$lane")
+  prepare_lane "$lane" "$fixture_root"
+  socket=$(app_socket "$lane")
+  printf -v pane_command '/bin/bash %q %q attach' "$SCRIPT_DIR/launch.sh" "$binary"
+  if run_tmux "$lane" "$fixture_root" "$socket" has-session -t app >/dev/null 2>&1; then
+    pane_dead=$(run_tmux "$lane" "$fixture_root" "$socket" display-message -p -t app:0.0 '#{pane_dead}')
+    if [[ $pane_dead == 1 ]]; then
+      printf '%s\n' "$binary" > "$dir/state/nerimux-bin"
+      printf '%s\n' "$fixture_root" > "$dir/state/fixture-root"
+      run_tmux "$lane" "$fixture_root" "$socket" respawn-pane -k -t app:0.0 "$pane_command"
+      run_tmux "$lane" "$fixture_root" "$socket" set-window-option -t app:0 -g remain-on-exit on
+      printf 'reattached lane %s; evidence: %s/evidence\n' "$lane" "$dir"
+    else
+      printf 'lane %s is already running\n' "$lane"
+    fi
+    return 0
+  fi
+  ensure_self_check "$lane"
+  printf '%s\n' "$binary" > "$dir/state/nerimux-bin"
+  printf '%s\n' "$fixture_root" > "$dir/state/fixture-root"
+  run_tmux "$lane" "$fixture_root" "$socket" new-session -d -s app -x 120 -y 40 "$pane_command"
+  run_tmux "$lane" "$fixture_root" "$socket" set-window-option -t app:0 -g remain-on-exit on
+  printf 'started lane %s; evidence: %s/evidence\n' "$lane" "$dir"
+}
+
+send_keys() {
+  local lane=$1 fixture_root dir socket
+  check_lane "$lane"
+  (( $# >= 2 )) || fail "keys requires at least one key"
+  shift
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  dir=$(lane_dir "$lane")
+  socket=$(app_socket "$lane")
+  run_tmux "$lane" "$fixture_root" "$socket" has-session -t app >/dev/null 2>&1 || fail "lane $lane is not running"
+  {
+    printf '%s\t' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    printf '%q ' "$@"
+    printf '\n'
+  } >> "$dir/evidence/keys.log"
+  run_tmux "$lane" "$fixture_root" "$socket" send-keys -t app:0.0 "$@"
+}
+
+save_snapshot() {
+  local lane=$1 case_id=$2 fixture_root dir socket destination
+  check_lane "$lane"
+  [[ $case_id =~ ^[A-Za-z0-9._-]+$ ]] || fail "invalid case ID: $case_id"
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  dir=$(lane_dir "$lane")
+  socket=$(app_socket "$lane")
+  destination="$dir/evidence/snapshots/$case_id"
+  mkdir -p "$destination"
+  run_tmux "$lane" "$fixture_root" "$socket" capture-pane -p -e -t app:0.0 > "$destination/pane-sgr.ansi"
+  run_tmux "$lane" "$fixture_root" "$socket" capture-pane -p -t app:0.0 > "$destination/pane.txt"
+  printf 'saved %s\n' "$destination"
+}
+
+record_raw() {
+  local lane=$1 requested=${2:-${NERIMUX_BIN:-}} binary fixture_root dir script_bin quoted_command output
+  check_lane "$lane"
+  dir=$(lane_dir "$lane")
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  if [[ -n $requested ]]; then
+    binary=$(absolute_executable "$requested")
+  elif [[ -f $dir/state/nerimux-bin ]]; then
+    IFS= read -r binary < "$dir/state/nerimux-bin"
+    [[ -x $binary ]] || fail "stored binary is not executable: $binary"
+  else
+    binary=$(absolute_executable nerimux)
+  fi
+  script_bin=$(type -P script || true)
+  [[ -n $script_bin ]] || fail "script is required for raw capture"
+  prepare_lane "$lane" "$fixture_root"
+  output="$dir/evidence/raw/$lane.typescript"
+  printf -v quoted_command '%q attach' "$binary"
+  case $(uname -s) in
+    Darwin) run_clean "$script_bin" -q "$output" "$binary" attach ;;
+    Linux) run_clean "$script_bin" -q -c "$quoted_command" "$output" ;;
+    *) fail "raw capture is supported on macOS and Linux" ;;
+  esac
+}
+
+resize_window() {
+  local lane=$1 columns=$2 rows=$3 fixture_root socket
+  check_lane "$lane"
+  [[ $columns =~ ^[1-9][0-9]*$ && $rows =~ ^[1-9][0-9]*$ ]] || fail "columns and rows must be positive integers"
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  socket=$(app_socket "$lane")
+  run_tmux "$lane" "$fixture_root" "$socket" resize-window -t app -x "$columns" -y "$rows"
+}
+
+stop_app() {
+  local lane=$1 requested=${2:-${NERIMUX_BIN:-}} binary fixture_root dir socket kill_status tmux_status
+  check_lane "$lane"
+  dir=$(lane_dir "$lane")
+  if [[ -n $requested ]]; then
+    binary=$(absolute_executable "$requested")
+  elif [[ -f $dir/state/nerimux-bin ]]; then
+    IFS= read -r binary < "$dir/state/nerimux-bin"
+    [[ -x $binary ]] || fail "stored binary is not executable: $binary"
+  else
+    binary=$(absolute_executable nerimux)
+  fi
+  fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  socket=$(app_socket "$lane")
+  prepare_lane "$lane" "$fixture_root"
+  if run_clean "$binary" kill --force > "$dir/evidence/stop.log" 2>&1; then
+    kill_status=0
+  else
+    kill_status=$?
+  fi
+  if run_tmux "$lane" "$fixture_root" "$socket" kill-server >> "$dir/evidence/stop.log" 2>&1; then
+    tmux_status=0
+  else
+    tmux_status=$?
+  fi
+  printf 'stop %s: nerimux=%s tmux=%s\n' "$lane" "$kill_status" "$tmux_status"
+  (( kill_status == 0 && tmux_status == 0 ))
+}
+
+main() {
+  local command=${1:-}
+  [[ -n $command ]] || { usage >&2; exit 2; }
+  shift
+  case $command in
+    start) (( $# >= 1 && $# <= 2 )) || fail "start expects a lane and optional binary"; start_app "$@" ;;
+    keys) (( $# >= 2 )) || fail "keys expects a lane and one or more keys"; send_keys "$@" ;;
+    wait-for) (( $# == 3 )) || fail "wait-for expects lane, regex, and seconds"; wait_for "$@" ;;
+    snap) (( $# == 2 )) || fail "snap expects lane and case ID"; save_snapshot "$@" ;;
+    raw) (( $# >= 1 && $# <= 2 )) || fail "raw expects lane and optional binary"; record_raw "$@" ;;
+    resize) (( $# == 3 )) || fail "resize expects lane, columns, and rows"; resize_window "$@" ;;
+    stop) (( $# >= 1 && $# <= 2 )) || fail "stop expects lane and optional binary"; stop_app "$@" ;;
+    self-check) (( $# == 1 )) || fail "self-check expects a lane"; run_self_check "$@" ;;
+    -h|--help|help) usage ;;
+    *) fail "unknown command: $command" ;;
+  esac
+}
+
+main "$@"
