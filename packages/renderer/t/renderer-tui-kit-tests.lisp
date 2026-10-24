@@ -510,6 +510,18 @@
       (expect (search "Pick a worktree, repository or pane" output))
       (expect (search "0 results" output))
       (expect (search "C-r regex" output))))
+  (it "preserves OSC 52 clipboard output through the public TUI renderer"
+    (let* ((session
+             (nerimux/test/renderer::make-renderer-test-session 80 16))
+           (screen
+             (nerimux/pane:pane-screen
+              (nerimux/session:session-active-pane session)))
+           (osc52 (format nil "~C]52;c;AQID~C" #\Escape #\Bel)))
+      (setf (nerimux/terminal/types:screen-clipboard-queue screen)
+            (list osc52))
+      (let ((output (nerimux/renderer:render-session-to-tui-string
+                     session 16 80)))
+        (expect (search osc52 output)))))
 
   (it "names the regex flag beside the query, and says when the pattern did not compile"
     (let ((off (nerimux/renderer:render-session-to-tui-string

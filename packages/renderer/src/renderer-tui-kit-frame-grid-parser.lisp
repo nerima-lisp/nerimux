@@ -171,20 +171,23 @@
         (length (length frame)))
     (loop while (< index length)
           do (cond
-               ((= (char-code (char frame index)) 7) (return (1+ index)))
+               ((= (char-code (char frame index)) 7)
+                (return-from %frame-grid-skip-osc (values (1+ index) t)))
                ((and (= (char-code (char frame index)) 27)
                      (< (1+ index) length)
-                     (char= (char frame (1+ index)) #\\)) (return (+ index 2)))
-               (t (incf index)))
-          finally (return length))))
+                     (char= (char frame (1+ index)) #\\))
+                (return-from %frame-grid-skip-osc (values (+ index 2) t)))
+               (t (incf index))))
+    (values length nil)))
 
 (defun %ansi-frame-grid (frame rows cols)
-  "Parse FRAME's ANSI escape sequences into a ROWS x COLS character grid.
+  "Parse the ANSI escape sequences in FRAME into a ROWS x COLS character grid.
 
-   Returns (VALUES CHARS-GRID STYLE-GRID): STYLE-GRID is a parallel grid of
-   CL-TUI-KIT/CORE:STYLE objects tracking every CSI ... m (SGR) sequence
-   seen while parsing (R-style-preservation).  Existing call sites that
-   only use the primary value are unaffected."
+   Returns (VALUES CHARS-GRID STYLE-GRID OSC52-SEQUENCES): STYLE-GRID is a
+   parallel grid of CL-TUI-KIT/CORE:STYLE objects tracking every CSI ... m
+   (SGR) sequence seen while parsing (R-style-preservation). OSC 52 clipboard
+   sequences are returned unchanged in a side channel because the character
+   grid cannot emit terminal control sequences."
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (grid (%make-frame-grid rows cols))
@@ -195,7 +198,8 @@
          (saved-col 0)
          (current-style (%default-style))
          (index 0)
-         (length (length frame)))
+         (length (length frame))
+         (osc52-sequences nil))
     (loop while (< index length)
           do (let ((character (char frame index)))
                (cond
@@ -219,7 +223,16 @@
                                                                      style-grid
                                                                      current-style)))
                         (#\]
-                         (setf index (%frame-grid-skip-osc frame (+ index 2))))
+                         (let ((osc-start (+ index 2)))
+                           (multiple-value-bind (end terminated-p)
+                               (%frame-grid-skip-osc frame osc-start)
+                             (when (and terminated-p
+                                        (<= (+ osc-start 3) end)
+                                        (string= "52;" frame
+                                                 :start2 osc-start
+                                                 :end2 (+ osc-start 3)))
+                               (push (subseq frame index end) osc52-sequences))
+                             (setf index end))))
                         (otherwise (incf index 2)))))
                  ((char= character #\Newline)
                    (setf col 0
@@ -245,4 +258,4 @@
                      (setf row (min (1+ row) (1- rows))))
                    (incf index))
                  (t (incf index)))))
-    (values grid style-grid)))
+    (values grid style-grid (nreverse osc52-sequences))))

@@ -20,15 +20,16 @@
 (defun %surface-from-ansi-frame (frame rows cols &key (viewport 0))
   "Parse FRAME into a headless CL-TUI-KIT/CORE surface, preserving SGR
    styling. CONTENT-HEIGHT includes VIEWPORT rows above the visible surface;
-   each visible row reads from CONTENT-ROW = SURFACE-ROW + VIEWPORT."
+   each visible row reads from CONTENT-ROW = SURFACE-ROW + VIEWPORT.
+   Return OSC 52 clipboard sequences as a second value for the caller."
   (let* ((rows (max 1 rows))
          (cols (max 1 cols))
          (viewport (max 0 viewport))
          (content-height (+ rows viewport))
          (surface (cl-tui-kit/core:make-surface cols rows)))
-    (multiple-value-bind (grid style-grid) 
+    (multiple-value-bind (grid style-grid osc52-sequences)
         (%ansi-frame-grid frame content-height cols)
-      (dotimes (surface-row rows surface)
+      (dotimes (surface-row rows)
         (let ((content-row (+ surface-row viewport)))
           (cl-tui-kit/core:surface-draw-styled-text surface
                                                     0
@@ -40,7 +41,8 @@
                                                       style-grid
                                                       content-row))
                                                     :max-width
-                                                    cols))))))
+                                                    cols)))
+      (values surface osc52-sequences))))
 
 (defstruct (ansi-row-snapshot (:constructor %make-ansi-row-snapshot))
   (rows #() :read-only t)
@@ -193,27 +195,45 @@
   "Render FRAME (an ANSI string) as a headless-backend frame at ROWS x COLS.
    WIDGET-RENDERER NIL is the common case (every view but an open picker):
    nothing draws onto a CL-TUI-KIT/CORE:SURFACE, so nothing needs one --
-   %FRAME-GRID-TO-ANSI-FRAME builds the output directly from %ANSI-FRAME-
-   GRID's parsed grid, skipping the per-cell surface allocation and
-   MAKE-CELL/VALIDATE/TEXT-UNIT-WIDTH cost of a surface round-trip this
-   frame never uses.  A supplied WIDGET-RENDERER (the picker modal) still
-   takes the CL-TUI-KIT/CORE:SURFACE path, the only one it can draw onto."
-  (let ((too-small-p (%terminal-too-small-p rows cols)))
-    (cond
-      (too-small-p
-       (%surface-to-ansi-frame (%render-terminal-too-small-surface rows cols)))
-      (widget-renderer
-       (let ((surface (%surface-from-ansi-frame frame rows cols :viewport viewport)))
-         (funcall widget-renderer surface)
-         (%surface-to-ansi-frame surface)))
-      (t
-       (let* ((rows (max 1 rows))
-              (cols (max 1 cols))
-              (viewport (max 0 viewport))
-              (content-height (+ rows viewport)))
-         (multiple-value-bind (grid style-grid)
-             (%ansi-frame-grid frame content-height cols)
-           (%frame-grid-to-ansi-frame grid style-grid rows cols viewport)))))))
+   %FRAME-GRID-TO-ANSI-FRAME builds the output directly from the parsed
+   grid, skipping the per-cell surface allocation and MAKE-CELL/VALIDATE/
+   TEXT-UNIT-WIDTH cost of a surface round-trip this frame never uses.  A
+   supplied WIDGET-RENDERER (the picker modal) still takes the
+   CL-TUI-KIT/CORE:SURFACE path, the only one it can draw onto.
+   OSC 52 clipboard sequences are appended unchanged."
+  (flet ((append-osc52 (output sequences snapshot)
+           (values (if sequences
+                       (apply (function concatenate) (quote string)
+                              (cons output sequences))
+                       output)
+                   snapshot)))
+    (let ((too-small-p (%terminal-too-small-p rows cols)))
+      (cond
+        (too-small-p
+         (multiple-value-bind (grid style-grid osc52-sequences)
+             (%ansi-frame-grid frame rows cols)
+           (declare (ignore grid style-grid))
+           (multiple-value-bind (output snapshot)
+               (%surface-to-ansi-frame
+                (%render-terminal-too-small-surface rows cols))
+             (append-osc52 output osc52-sequences snapshot))))
+        (widget-renderer
+         (multiple-value-bind (surface osc52-sequences)
+             (%surface-from-ansi-frame frame rows cols :viewport viewport)
+           (funcall widget-renderer surface)
+           (multiple-value-bind (output snapshot)
+               (%surface-to-ansi-frame surface)
+             (append-osc52 output osc52-sequences snapshot))))
+        (t
+         (let* ((rows (max 1 rows))
+                (cols (max 1 cols))
+                (viewport (max 0 viewport))
+                (content-height (+ rows viewport)))
+           (multiple-value-bind (grid style-grid osc52-sequences)
+               (%ansi-frame-grid frame content-height cols)
+             (multiple-value-bind (output snapshot)
+                 (%frame-grid-to-ansi-frame grid style-grid rows cols viewport)
+               (append-osc52 output osc52-sequences snapshot)))))))))
 
 (defun render-session-to-tui-string (session terminal-rows terminal-cols
                                      &key focus-pane (viewport 0) (mode nil)
