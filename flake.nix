@@ -106,8 +106,11 @@
       ...
     }:
     let
-      # CI and local evaluation target x86_64-linux only.
-      systems = [ "x86_64-linux" ];
+      # CI remains x86_64-linux; flake outputs also target aarch64-darwin.
+      systems = [
+        "x86_64-linux"
+        "aarch64-darwin"
+      ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
       # Do not hide broken packages. Restore allowBroken only with a package that
