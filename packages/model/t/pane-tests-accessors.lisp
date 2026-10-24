@@ -85,7 +85,43 @@
       (loop for offset from 0 below (length bytes) by 8
             do (replace bytes #(27 93 57 59 120 120 120 7) :start1 offset))
       (pane-feed pane bytes)
-      (expect (= 1 (length (pane-drain-notifications pane)))))))
+      (expect (= 1 (length (pane-drain-notifications pane))))))
+  (it "pane-record-coalesces-100ms-notifications-across-second-boundary"
+    (let* ((pane (make-pane :id 1 :screen (make-screen 10 5)))
+           (units-per-second internal-time-units-per-second)
+           (step (floor units-per-second 10))
+           (last-forwarded (+ (* 100 units-per-second) (* 8 step)))
+           (raw-bytes #(27 93 57 59 120 120 120 7)))
+      (setf (nerimux/pane:pane-last-notification-time pane)
+            (floor last-forwarded units-per-second)
+            (nerimux/pane::pane-last-notification-monotonic-time pane)
+            last-forwarded)
+      (loop for monotonic-now = (+ last-forwarded step)
+              then (+ monotonic-now step)
+            for wall-now = (floor monotonic-now units-per-second)
+            repeat 5
+            do (nerimux/pane:pane-record-notification
+                pane raw-bytes "repeat" wall-now
+                :monotonic-now monotonic-now))
+      (expect (= 1
+                 (- (floor (+ last-forwarded (* 2 step)) units-per-second)
+                    (floor last-forwarded units-per-second))))
+      (expect (null (nerimux/pane:pane-raw-notification-queue pane)))
+      (expect
+       (nerimux/pane::pane-pending-raw-notification pane))
+      (expect
+       (null
+        (nerimux/pane:pane-drain-notifications
+         pane (+ last-forwarded (* 9 step)))))
+      (expect
+       (equalp raw-bytes
+               (first
+                (nerimux/pane:pane-drain-notifications
+                 pane (+ last-forwarded units-per-second)))))
+      (expect
+       (null (nerimux/pane::pane-pending-raw-notification pane)))
+      (expect
+       (integerp (nerimux/pane:pane-last-notification-time pane))))))
 
 (describe "pane output preview"
 

@@ -2,7 +2,7 @@
 
 (defconstant +pane-notification-coalesce-seconds+
   1
-  "The timestamp bucket used to coalesce pane notification events.")
+  "The minimum seconds between forwarded pane notifications.")
 
 (defvar *waiting-state-dispatch* #'funcall
   "Dispatch waiting-state mutations to the owning thread.
@@ -55,6 +55,7 @@ binds this to its main-thread callback queue while reader threads are active.")
   (notification-attention-p nil :type boolean)
   (raw-notification-queue nil :type list)
   (last-notification-time nil)
+  (last-notification-monotonic-time nil)
   (pending-raw-notification nil :type list)
   (local-options (make-hash-table :test #'equal) :type hash-table))
 
@@ -253,10 +254,11 @@ binds this to its main-thread callback queue while reader threads are active.")
           (pane-last-output-time pane) (get-universal-time)))
   pane)
 
-(defun pane-record-notification (pane raw-bytes text &optional (now (get-universal-time)))
+(defun pane-record-notification (pane raw-bytes text
+                                &optional (now (get-universal-time))
+                                &key (monotonic-now (get-internal-real-time)))
   "Store the newest raw notification while enforcing PANE's one-second rate.
-   A notification waiting in the queue is replaced by a newer eligible event;
-   events arriving before the next eligible second are coalesced separately."
+   NOW is the event's wall-clock timestamp; MONOTONIC-NOW drives the rate gate."
   (when pane
     (pane-notify pane text)
     (setf (pane-notification-attention-p pane) t)
@@ -272,33 +274,41 @@ binds this to its main-thread callback queue while reader threads are active.")
      now)
     (let ((entry (cons now
                        (coerce raw-bytes
-                               '(simple-array (unsigned-byte 8) (*))))))
-      (if (or (null (pane-last-notification-time pane))
-              (>= (- now (pane-last-notification-time pane))
-                  +pane-notification-coalesce-seconds+))
+                               '(simple-array (unsigned-byte 8) (*)))))
+          (last-forwarded (pane-last-notification-monotonic-time pane)))
+      (if (or (null last-forwarded)
+              (>= (- monotonic-now last-forwarded)
+                  (* +pane-notification-coalesce-seconds+
+                     internal-time-units-per-second)))
           (setf (pane-raw-notification-queue pane) (list entry)
                 (pane-pending-raw-notification pane) nil)
           (setf (pane-pending-raw-notification pane) entry))))
   pane)
 
-(defun pane-drain-notifications (pane)
+(defun pane-drain-notifications
+    (pane &optional (monotonic-now (get-internal-real-time)))
   "Return PANE's raw notification sequences and clear the send queue.
    A coalesced event becomes eligible only after the one-second interval from
    the last forwarded event has elapsed."
   (when pane
     (with-lock-held ((pane-process-lock pane))
-      (let ((now (get-universal-time)))
+      (let ((wall-now (get-universal-time))
+            (last-forwarded
+              (pane-last-notification-monotonic-time pane)))
         (when (and (pane-pending-raw-notification pane)
-                   (pane-last-notification-time pane)
-                   (>= (- now (pane-last-notification-time pane))
-                       +pane-notification-coalesce-seconds+))
+                   last-forwarded
+                   (>= (- monotonic-now last-forwarded)
+                       (* +pane-notification-coalesce-seconds+
+                          internal-time-units-per-second)))
           (setf (pane-raw-notification-queue pane)
                 (list (pane-pending-raw-notification pane))
                 (pane-pending-raw-notification pane) nil))
         (let ((entries (nreverse (pane-raw-notification-queue pane))))
           (setf (pane-raw-notification-queue pane) nil)
           (when entries
-            (setf (pane-last-notification-time pane) now))
+            (setf (pane-last-notification-time pane) wall-now
+                  (pane-last-notification-monotonic-time pane)
+                  monotonic-now))
           (mapcar #'cdr entries))))))
 
 (defun pane-clear-unread-output (pane)
