@@ -148,7 +148,7 @@
           (expect (search "opening worktree feature/raw-name"
                           (first (nerimux::client-conn-message-log conn))))
           (expect (null (nerimux::client-conn-modal conn)))
-          (dolist (branch (list "force"))
+          (let ((branch "force"))
             (setf create-call nil)
             (nerimux::%handle-multi-key-message
              session conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))

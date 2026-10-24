@@ -1,7 +1,7 @@
 (in-package #:asdf-user)
 
 (defsystem "nerimux-text"
-  :description "FOUNDATION string-to-value coercions for nerimux, depending on nothing"
+  :description "FOUNDATION dependency-free text helpers for nerimux"
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"

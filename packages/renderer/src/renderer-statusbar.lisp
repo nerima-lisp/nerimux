@@ -93,12 +93,7 @@
            (format nil
                    "win ~D:~A"
                    (window-id window)
-                   (remove-if
-                    (lambda (character)
-                      (let ((code (char-code character)))
-                        (or (< code 32)
-                            (<= 127 code 159))))
-                    (window-name window)))
+                   (remove-if #'nerimux/text:control-character-p (window-name window)))
            +sgr-muted+)
           (cons (%status-wrap " pane" +sgr-muted+)
                 (mapcar

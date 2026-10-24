@@ -49,3 +49,17 @@
     (dolist (pair '(("0" 0) ("42" 42) ("-3" -3)))
       (destructuring-bind (str expected) pair
         (expect (= expected (nerimux/text:parse-integer-or-nil str)))))))
+
+(describe "shared control character classification"
+  (it "classifies C0, DEL, C1, and bidi formatting controls"
+    (dolist (code
+             (append
+              (loop for code from 0 to 31 collect code)
+              (list 127)
+              (loop for code from 128 to 159 collect code)
+              (list #x061c #x200e #x200f)
+              (loop for code from #x202a to #x202e collect code)
+              (loop for code from #x2066 to #x2069 collect code)))
+      (expect (nerimux/text:control-character-p (code-char code))))
+    (dolist (code (list 32 126 160 #x200d #x2020 #x2065))
+      (expect (not (nerimux/text:control-character-p (code-char code)))))))

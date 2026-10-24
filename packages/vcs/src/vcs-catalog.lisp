@@ -11,33 +11,17 @@
     (t (princ-to-string value))))
 
 (defun %strip-control-characters (text)
-  "TEXT with every control character removed -- C0 (code < 32), DEL (127) and
-C1 (128-159) -- except Newline (10) and Tab (9), which are kept verbatim (F5,
-CWE-150-adjacent). Applies to any text this module retains from an untrusted
-VCS invocation before it reaches a renderer: safety there currently rests only
-on cl-tui-kit's incidental zero-width-glyph skip, which does not cover every
-render path (e.g. the exported plain-ANSI path). Non-string TEXT passes
-through unchanged.
+  "TEXT with terminal and bidi controls removed, except Newline and Tab.
 
-Newline and Tab stay because git's own multi-line output is the payload for
-two views: the diff pager splits on newline to scroll, and the process log
-splits on newline to show a failure's real text. Stripping them glued whole
-diffs and whole error messages into one clipped line. Neither character can
-introduce an escape sequence, which is what this function exists to stop.
-
-C1 is included because the client wire is UTF-8, so a branch name or commit
-subject carrying U+009B arrives here as one character rather than a raw byte,
-and a terminal decoding UTF-8 then treating C1 as 8-bit control introducers
-reads it as CSI. Stripping C0 alone would block `ESC [` and pass its exact
-8-bit equivalent."
+   Newline and Tab stay because git multi-line output powers the diff pager
+   and process log."
   (if (stringp text)
       (with-output-to-string (out)
         (loop for character across text
-              for code = (char-code character)
-              do (cond
-                   ((or (= code 9) (= code 10)) (write-char character out))
-                   ((or (< code 32) (<= 127 code 159)))
-                   (t (write-char character out)))))
+              unless (and (nerimux/text:control-character-p character)
+                          (not (or (char= character #\Newline)
+                                   (char= character #\Tab))))
+                do (write-char character out)))
       text))
 
 (defun %specification-parts (specification)

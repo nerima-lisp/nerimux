@@ -844,3 +844,13 @@
         "leftright"
         (nerimux::%strip-argument-control-characters
          (format nil "left~Cright" (code-char code))))))))
+
+(describe "branch text control handling"
+  (it "removes U+200E from a branch name before argv validation and display"
+    (let ((branch (format nil "feature/~Ctopic" (code-char #x200e))))
+      (expect
+       (string= "feature/topic"
+                (nerimux::%strip-argument-control-characters branch)))
+      (expect
+       (string= "feature/topic"
+                (nerimux::%client-branch-display-text branch))))))

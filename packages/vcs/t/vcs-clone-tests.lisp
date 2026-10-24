@@ -414,3 +414,12 @@
              (expect (string= expected-path path))
              (expect (nerimux/vcs::%clone-target-is-bare-p path)))))))))
 
+(describe "clone control validation"
+  (it "rejects bidi controls in clone input"
+    (dolist (code
+             (append
+              (list #x061c #x200e #x200f)
+              (loop for code from #x202a to #x202e collect code)
+              (loop for code from #x2066 to #x2069 collect code)))
+      (expect (nerimux/vcs::%clone-control-or-whitespace-p
+               (code-char code))))))

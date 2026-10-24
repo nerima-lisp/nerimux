@@ -9,7 +9,7 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux-model" :cl-vcs-kit :cl-concurrent-kit)
+  :depends-on ("nerimux-model" "nerimux-text" :cl-vcs-kit :cl-concurrent-kit)
   :pathname "src"
   :serial t
   :components ((:file "package")

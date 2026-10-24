@@ -259,3 +259,21 @@ line two"))
 line two
 line three"))))
       (expect (stringp (nerimux/renderer:render-process-log-to-tui-string entries 6 40))))))
+
+(describe "process log bidi control stripping"
+  (it "removes bidi controls while preserving log line breaks"
+    (dolist (code
+             (append
+              (list #x061c #x200e #x200f)
+              (loop for code from #x202a to #x202e collect code)
+              (loop for code from #x2066 to #x2069 collect code)))
+      (expect
+       (string=
+        "leftright"
+        (nerimux/renderer::%process-log-strip-control-characters
+         (format nil "left~Cright" (code-char code))))))
+    (expect
+     (string=
+      (format nil "left~Cright" (code-char 10))
+      (nerimux/renderer::%process-log-strip-control-characters
+       (format nil "left~Cright" (code-char 10)))))))

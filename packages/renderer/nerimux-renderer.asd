@@ -9,7 +9,7 @@
   :homepage "https://github.com/nerima-lisp/nerimux"
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
-  :depends-on ("nerimux-model" "nerimux-terminal" "nerimux-picker"
+  :depends-on ("nerimux-model" "nerimux-text" "nerimux-terminal" "nerimux-picker"
                :cl-tui-kit/core :cl-tui-kit/ansi :cl-tui-kit/layout :cl-tui-kit/widgets
                :cl-tty-kit (:version "cl-regex-kit" "2.2.0") :cl-concurrent-kit)
   :pathname "src"

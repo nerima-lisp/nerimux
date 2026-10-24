@@ -62,7 +62,7 @@
       (t (+ index 2)))))
 
 (defun %strip-argument-control-characters (text)
-  "TEXT without terminal, C0/C1, or bidirectional formatting controls."
+  "TEXT without terminal or bidirectional formatting controls."
   (with-output-to-string (out)
     (let ((length (length text))
           (index 0))
@@ -71,11 +71,7 @@
                  (cond
                    ((char= character #\Escape)
                     (setf index (%argument-escape-sequence-end text index)))
-                   ((let ((code (char-code character)))
-                      (or (< code 32)
-                          (<= 127 code 159)
-                          (<= #x202a code #x202e)
-                          (<= #x2066 code #x2069)))
+                   ((nerimux/text:control-character-p character)
                     (incf index))
                    (t
                     (write-char character out)

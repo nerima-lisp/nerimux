@@ -13,17 +13,7 @@
         (subseq path (1+ (length root)))
         path)))
 (defun %client-branch-display-text (branch)
-  (remove-if
-   (lambda (character)
-     (let ((code (char-code character)))
-       (or (< code 32)
-           (= code 127)
-           (<= 128 code 159)
-           (= code #x061c)
-           (<= #x200e code #x200f)
-           (<= #x202a code #x202e)
-           (<= #x2066 code #x2069))))
-   (%strip-argument-control-characters branch)))
+  (%strip-argument-control-characters branch))
 (defun %client-branch-picker-items (candidates)
   (loop for candidate in candidates
         for kind = (getf candidate :kind)

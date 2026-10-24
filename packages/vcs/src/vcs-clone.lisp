@@ -34,10 +34,8 @@
        (string-equal prefix string :end2 (length prefix))))
 
 (defun %clone-control-or-whitespace-p (character)
-  (let ((code (char-code character)))
-    (or (sb-unicode:whitespace-p character)
-        (< code 32)
-        (<= 127 code 159))))
+  (or (sb-unicode:whitespace-p character)
+      (nerimux/text:control-character-p character)))
 
 (defun %clone-text-valid-p (text)
   (and (stringp text)
@@ -218,17 +216,16 @@
   (let ((clean (with-output-to-string (output)
                  (loop with space-p = nil
                        for character across (%redact-clone-credentials text)
-                       for code = (char-code character)
                        do (cond
                             ((sb-unicode:whitespace-p character)
                              (unless space-p (write-char #\Space output))
                              (setf space-p t))
-                            ((or (< code 32) (<= 127 code 159))
+                            ((nerimux/text:control-character-p character)
                              (setf space-p t))
                             (t
                              (write-char character output)
                              (setf space-p nil)))))))
-    (let ((trimmed (string-trim '(#\Space) clean)))
+    (let ((trimmed (string-trim (list #\Space) clean)))
       (if (> (length trimmed) 180)
           (subseq trimmed 0 180)
           trimmed))))

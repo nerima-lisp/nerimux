@@ -37,3 +37,21 @@
                 (expect (functionp queued))
                 (funcall queued)
                 (expect (eq :done result)))))
+
+(describe "VCS bidi control stripping"
+  (it "removes bidi controls while preserving log line breaks"
+    (dolist (code
+             (append
+              (list #x061c #x200e #x200f)
+              (loop for code from #x202a to #x202e collect code)
+              (loop for code from #x2066 to #x2069 collect code)))
+      (expect
+       (string=
+        "leftright"
+        (nerimux/vcs::%strip-control-characters
+         (format nil "left~Cright" (code-char code))))))
+    (expect
+     (string=
+      (format nil "left~Cright" (code-char 10))
+      (nerimux/vcs::%strip-control-characters
+       (format nil "left~Cright" (code-char 10)))))))

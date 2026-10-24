@@ -27,3 +27,13 @@
            nil)
          (type-error ()
            nil))))
+
+(defun control-character-p (character)
+  "Return true for terminal controls and bidi formatting marks that alter displayed text."
+  (let ((code (char-code character)))
+    (or (< code 32)
+        (<= 127 code 159)
+        (= code #x061c)
+        (<= #x200e code #x200f)
+        (<= #x202a code #x202e)
+        (<= #x2066 code #x2069))))
