@@ -140,15 +140,24 @@
         (expect (find-if (lambda (e) (search "Stashes (1)" (second e))) headers))
         (expect (find-if (lambda (e) (search "stashes: refreshing..." (second e))) entries)))))
 
-  (it "keeps WORKSPACE-STATUS-OBJECTS in lockstep with WORKSPACE-STATUS-ENTRIES"
+  (it "status view labels use words while preserving raw row codes"
     (multiple-value-bind (worktree)
         (%build-status-fixture
+         :untracked '(("??" . "new.txt"))
          :unstaged '(("M" . "a.txt"))
          :staged '(("A" . "b.txt"))
          :commits '(("abc1234" . "one") ("def5678" . "two"))
          :commits-state :ready
          :sibling-p t)
-      (let ((entries (nerimux/renderer:workspace-status-entries worktree)))
+      (let* ((entries (nerimux/renderer:workspace-status-entries worktree))
+             (file-entries (remove-if-not
+                            (lambda (entry) (eq :file (fourth entry)))
+                            entries)))
+        (expect (equal '("untracked new.txt" "modified a.txt" "added b.txt")
+                       (mapcar #'second file-entries)))
+        (expect (equal '("??" "M" "A")
+                       (mapcar (lambda (entry) (fourth (third entry)))
+                               file-entries)))
         (expect (equal (mapcar #'third entries)
                        (nerimux/renderer:workspace-status-objects worktree)))))))
 
@@ -205,10 +214,11 @@
 
 (describe "renderer-suite/workspace-status-render"
 
-  (it "renders the header, branch, section headings, and status codes"
+  (it "status view labels render words instead of porcelain codes"
     (multiple-value-bind (worktree)
         (%build-status-fixture
          :head "abc1234" :ahead 2 :behind 1
+         :untracked '(("??" . "untracked.txt"))
          :unstaged '(("M" . "unstaged.txt"))
          :staged '(("A" . "staged.txt")))
       (let* ((output (nerimux/renderer:render-workspace-status-to-tui-string
@@ -218,8 +228,12 @@
         (expect (search "feature/status" visible))
         (expect (search "Unstaged changes (1)" visible))
         (expect (search "Staged changes (1)" visible))
-        (expect (search "unstaged.txt" visible))
-        (expect (search "staged.txt" visible))
+        (expect (search "untracked untracked.txt" visible))
+        (expect (search "modified unstaged.txt" visible))
+        (expect (search "added staged.txt" visible))
+        (expect (not (search "?? untracked.txt" visible)))
+        (expect (not (search "M unstaged.txt" visible)))
+        (expect (not (search "A staged.txt" visible)))
         (expect output :to-contain-sgr
                 (%expected-sgr-params (nerimux/renderer::%workspace-status-style-heading))))))
 

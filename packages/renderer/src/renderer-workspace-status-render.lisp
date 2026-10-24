@@ -73,9 +73,12 @@
      (let ((code (fourth object))
            (path (third object)))
        (list
-        (cl-tui-kit/core:make-text-span code
-                                        :style
-                                        (%workspace-status-file-code-style code))
+        (cl-tui-kit/core:make-text-span
+          (subseq label
+                  0
+                  (- (length label) (1+ (length path))))
+          :style
+          (%workspace-status-file-code-style code))
         (cl-tui-kit/core:make-text-span (format nil " ~A" path)))))
     (:commit
      (let ((hash (third object))

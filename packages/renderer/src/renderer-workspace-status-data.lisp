@@ -132,7 +132,7 @@
   (loop for (code . path) in files
         append (cons
                 (list level
-                      (format nil "~A ~A" code path)
+                      (format nil "~A ~A" (%changed-file-state-text code) path)
                       (list :file worktree-id path code)
                       :file)
                 (%workspace-status-file-diff-child-entries worktree-id
