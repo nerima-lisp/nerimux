@@ -39,7 +39,12 @@ printf '\033(0lqqqqqqqqk\n x        x\n mqqqqqqqqj\033(B\n'
 printf 'wide CJK: 日本語の表示\n'
 printf '\033]133;A\007\033]133;B\007\033]133;C\007command output\n\033]133;D;0\007'
 printf '\033]52;c;ZmFrZS1jbGlwYm9hcmQ=\007'
+printf '\nPress Enter to restore the alternate screen...\n'
+read_status=0
+IFS= read -r _ || read_status=$?
+printf '\n'
 printf '\033[0m\033[r'
 printf '\033[?1049l'
+exit "$read_status"
 TERM_SCRIPT
 chmod 755 "$fixture_root/run.sh"

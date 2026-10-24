@@ -40,7 +40,12 @@ IFS= read -r agent_input || :
 printf '%s received input\n' "${0##*/}"
 printf '\a\033]9;fixture notification\007\033]99;fixture notification\007\033]999;unknown fixture notification\007\n'
 
-exit_code=${NMX_FAKE_EXIT_CODE:-0}
+if [[ -n ${NMX_FAKE_EXIT_CODE:-} ]]; then
+  exit_code=$NMX_FAKE_EXIT_CODE
+else
+  agent_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+  IFS= read -r exit_code < "$agent_dir/exit-code"
+fi
 if [[ ! $exit_code =~ ^[0-9]+$ ]] || (( ${#exit_code} > 3 )); then
   printf 'NMX_FAKE_EXIT_CODE must be between 0 and 255\n' >&2
   exit 64
@@ -57,3 +62,4 @@ AGENT_SCRIPT
 
 write_fake_agent "$fixture_root/bin/claude"
 write_fake_agent "$fixture_root/bin/codex"
+printf '0\n' > "$fixture_root/bin/exit-code"

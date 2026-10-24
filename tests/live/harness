@@ -76,6 +76,9 @@ prepare_lane() {
   if [[ -n ${GIT_CONFIG_GLOBAL:-} ]]; then
     ENV_ARGS+=("GIT_CONFIG_GLOBAL=$GIT_CONFIG_GLOBAL")
   fi
+  if [[ ${NMX_FAKE_EXIT_CODE+x} ]]; then
+    ENV_ARGS+=("NMX_FAKE_EXIT_CODE=$NMX_FAKE_EXIT_CODE")
+  fi
 }
 
 run_clean() {
@@ -133,46 +136,56 @@ shell_escaped_sentinel() {
 }
 
 run_self_check() {
-  local lane=$1 dir fixture_root socket positive negative command marker evidence
+  local lane=$1 dir fixture_root socket positive negative command marker evidence selfcheck_root original_live_root
   check_lane "$lane"
   dir=$(lane_dir "$lane")
   fixture_root=${LIVE_FIXTURE_ROOT:-$(default_fixture_root "$lane")}
+  selfcheck_root="$dir/self-check-runtime/run-$BASHPID"
+  original_live_root=$LIVE_ROOT
+  LIVE_ROOT=$selfcheck_root
   prepare_lane "$lane" "$fixture_root"
-  socket="nmx-${lane}-selfcheck"
-  mkdir -p "$dir/tmux-selfcheck"
+  socket=$(app_socket "$lane")
   marker="$dir/state/self-check.ok"
-  evidence="$dir/evidence/self-check"
+  evidence="$dir/evidence/self-check/run-$BASHPID"
   mkdir -p "$evidence"
-  if run_tmux "$lane" "$fixture_root" "$socket" new-session -d -s check -x 100 -y 24 \
+  rm -f "$marker"
+  if run_tmux "$lane" "$fixture_root" "$socket" new-session -d -s app -x 100 -y 24 \
     '/bin/bash --noprofile --norc -i' >/dev/null; then
     positive="NMX_HARNESS_OK_${BASHPID}"
     negative="NMX_HARNESS_NEVER_${BASHPID}"
     command="printf '%b\\n' '$(shell_escaped_sentinel "$positive")'"
-    run_tmux "$lane" "$fixture_root" "$socket" send-keys -t check:0.0 "$command" Enter
-    if ! wait_for_on_socket "$lane" "$fixture_root" "$socket" check "$positive" 5 \
+    run_tmux "$lane" "$fixture_root" "$socket" send-keys -t app:0.0 "$command" Enter
+    if ! LIVE_BASE_TMPDIR="$selfcheck_root" LIVE_FIXTURE_ROOT="$fixture_root" \
+      "$SCRIPT_DIR/harness" wait-for "$lane" "$positive" 5 \
       2> "$evidence/positive-wait.log"; then
       run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null 2>&1 || true
+      LIVE_ROOT=$original_live_root
       return 1
     fi
-    run_tmux "$lane" "$fixture_root" "$socket" capture-pane -p -t check:0.0 \
+    run_tmux "$lane" "$fixture_root" "$socket" capture-pane -p -t app:0.0 \
       > "$evidence/pane.txt"
-    if wait_for_on_socket "$lane" "$fixture_root" "$socket" check "$negative" 1 \
+    if LIVE_BASE_TMPDIR="$selfcheck_root" LIVE_FIXTURE_ROOT="$fixture_root" \
+      "$SCRIPT_DIR/harness" wait-for "$lane" "$negative" 1 \
       2> "$evidence/negative-wait.log"; then
       printf 'harness: wait-for unexpectedly matched absent text\n' >&2
       run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null 2>&1 || true
+      LIVE_ROOT=$original_live_root
       return 1
     fi
     grep -Fq 'timed out after 1 seconds' "$evidence/negative-wait.log" || {
       printf 'harness: negative wait did not fail by timeout\n' >&2
       run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null 2>&1 || true
+      LIVE_ROOT=$original_live_root
       return 1
     }
     run_tmux "$lane" "$fixture_root" "$socket" kill-server >/dev/null
     printf 'positive=%s\nnegative=timeout\n' "$positive" > "$evidence/result.txt"
     printf 'passed\n' > "$marker"
+    LIVE_ROOT=$original_live_root
     printf 'self-check %s: passed\n' "$lane"
   else
     printf 'harness: could not start self-check session for %s\n' "$lane" >&2
+    LIVE_ROOT=$original_live_root
     return 1
   fi
 }
@@ -191,13 +204,13 @@ start_app() {
   [[ -d ${GHQ_ROOT:-$fixture_root/ghq} ]] || fail "GHQ root does not exist: ${GHQ_ROOT:-$fixture_root/ghq}"
   dir=$(lane_dir "$lane")
   prepare_lane "$lane" "$fixture_root"
+  ensure_self_check "$lane"
   socket=$(app_socket "$lane")
   printf -v pane_command '/bin/bash %q %q attach' "$SCRIPT_DIR/launch.sh" "$binary"
   if run_tmux "$lane" "$fixture_root" "$socket" has-session -t app >/dev/null 2>&1; then
     pane_dead=$(run_tmux "$lane" "$fixture_root" "$socket" display-message -p -t app:0.0 '#{pane_dead}')
     if [[ $pane_dead == 1 ]]; then
       printf '%s\n' "$binary" > "$dir/state/nerimux-bin"
-      printf '%s\n' "$fixture_root" > "$dir/state/fixture-root"
       run_tmux "$lane" "$fixture_root" "$socket" respawn-pane -k -t app:0.0 "$pane_command"
       run_tmux "$lane" "$fixture_root" "$socket" set-window-option -t app:0 -g remain-on-exit on
       printf 'reattached lane %s; evidence: %s/evidence\n' "$lane" "$dir"
@@ -206,9 +219,7 @@ start_app() {
     fi
     return 0
   fi
-  ensure_self_check "$lane"
   printf '%s\n' "$binary" > "$dir/state/nerimux-bin"
-  printf '%s\n' "$fixture_root" > "$dir/state/fixture-root"
   run_tmux "$lane" "$fixture_root" "$socket" new-session -d -s app -x 120 -y 40 "$pane_command"
   run_tmux "$lane" "$fixture_root" "$socket" set-window-option -t app:0 -g remain-on-exit on
   printf 'started lane %s; evidence: %s/evidence\n' "$lane" "$dir"
