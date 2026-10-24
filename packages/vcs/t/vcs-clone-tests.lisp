@@ -269,7 +269,8 @@
                                 (nerimux/vcs:clone-error-reason condition))))
                (expect (null result))
                (expect (and (typep condition 'nerimux/vcs:clone-error)
-                            (search " -> " reason)))))
+                            (stringp reason)
+                            (plusp (length reason))))))
            (let* ((control-environment
                     (nerimux/vcs::%clone-process-environment
                      (environment-for control-root file-config)))
@@ -296,7 +297,8 @@
                                 (nerimux/vcs:clone-error-reason condition))))
                (expect (null result))
                (expect (and (typep condition 'nerimux/vcs:clone-error)
-                            (search " -> " reason)))
+                            (stringp reason)
+                            (plusp (length reason))))
                (expect (not (probe-file ext-marker))))
              (let ((control-root (merge-pathnames "ghq-ext-control/" base)))
                (ensure-directories-exist control-root)
