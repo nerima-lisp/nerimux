@@ -104,7 +104,7 @@
                    (format nil "worktree create failed: ~A" safe-reason)
                    +max-notify-characters+))
                  (%mark-dirty)))
-             (on-complete (worktree)
+             (%on-complete (worktree)
                (%workspace-job-update job repository :succeeded)
                (%clear-workspace-refreshing
                 :repository
@@ -155,7 +155,7 @@
              :on-start
              (lambda ()
                (%workspace-job-update job repository :running))
-             :on-complete #'on-complete
+             :on-complete #'%on-complete
              :on-error #'%on-error)
           (error (condition)
             (%on-error condition))))))

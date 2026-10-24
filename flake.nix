@@ -442,7 +442,10 @@
 
           export-check = mkStaticCheck "export-check" "perl scripts/checks/export-check.pl .";
 
-          internal-call-check = mkStaticCheck "internal-call-check" "perl scripts/checks/internal-call-check.pl .";
+          internal-call-check = mkStaticCheck "internal-call-check" ''
+            perl scripts/checks/internal-call-check.pl .
+            perl scripts/checks/internal-call-check-regression-tests.pl scripts/checks/internal-call-check.pl
+          '';
 
           suite-structure-check = mkStaticCheck "suite-structure-check" "perl scripts/checks/suite-structure-check.pl .";
         }
