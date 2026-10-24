@@ -91,3 +91,164 @@
           (dolist (command '((:picker-accept nil nil) (:picker-refresh nil nil) (:picker-next "2" nil) (:picker-up "2" nil) (:picker-backspace nil nil) (:picker-query "needle" nil) (:picker-query nil ("from-args")) (:picker-regex "pattern" nil) (:picker-regex nil ("from-args"))))
             (destructuring-bind (name target args) command (expect (nerimux::%handle-client-ui-command s conn name target args))))
           (expect (equal '((:regex "from-args" ("from-args")) (:regex "pattern" "pattern") (:query "from-args") (:query "needle") :backspace (:move -2) (:move 2) :dirty :refresh :select) calls)))))))
+(describe "server-multi-clone-command-suite"
+  (it "registers a repository row and selects its default worktree"
+    (with-fake-session (session)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (nerimux::*main-thread-callbacks* nil)
+             (nerimux::*workspace-operation-jobs* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* nil)
+             (clone-complete nil)
+             (detached-repository nil)
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :path "/tmp/nerimux-clone-checkout"
+                :branch "main")))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p
+               (lambda () t))
+             (nerimux/vcs:clone-bare-repository-async
+               (lambda (source &key on-start on-complete on-error callback-dispatch)
+                 (declare (ignore source on-error))
+                 (setf clone-complete on-complete)
+                 (funcall callback-dispatch
+                          (lambda () (funcall on-start "github.com/team/repository")))))
+             (nerimux/vcs:create-detached-worktree-async
+               (lambda (repository &key on-start on-complete on-error callback-dispatch)
+                 (declare (ignore on-error))
+                 (setf detached-repository repository)
+                 (funcall callback-dispatch on-start)
+                 (funcall callback-dispatch
+                          (lambda ()
+                            (funcall
+                             on-complete
+                             (nerimux/vcs::%make-detached-worktree-result
+                              :path (nerimux/workspace-model:worktree-path worktree)
+                              :head "abc123"
+                              :worktree worktree))))))
+             (nerimux::%refresh-client-picker
+               (lambda (client &key on-complete)
+                 (let* ((organizations
+                          (list
+                           (nerimux/workspace-model:make-organization
+                            :host "github.com" :name "team")))
+                        (repository
+                          (nerimux/workspace-model:make-repository
+                           :specification "github.com/team/repository"))
+                        (refreshed-worktree
+                          (nerimux/workspace-model:make-worktree
+                           :id "refreshed-worktree"
+                           :path "/private/tmp/nerimux-clone-checkout"
+                           :branch "main")))
+                   (nerimux/workspace-model:organization-add-repository
+                    (first organizations) repository)
+                   (nerimux/workspace-model:repository-add-worktree
+                    repository refreshed-worktree)
+                   (progn
+                     (nerimux::%rebind-client-selection client organizations)
+                     (nerimux::%set-client-selected-tree-object
+                      client :repositories))
+                   (when on-complete (funcall on-complete organizations))))))
+          (expect (nerimux::%client-clone-repository
+                   conn nil '("https://github.com/team/repository")))
+          (expect (functionp clone-complete))
+          (nerimux::%drain-main-thread-callbacks)
+          (let* ((repository
+                   (loop for organization in (nerimux/vcs:workspace-organizations)
+                         thereis
+                         (find "github.com/team/repository"
+                               (nerimux/workspace-model:organization-repositories
+                                organization)
+                               :key #'nerimux/workspace-model:repository-specification
+                               :test #'string=)))
+                 (job-key (list :repository
+                                (nerimux/workspace-model:repository-id repository)
+                                :clone))
+                 (job (gethash job-key nerimux::*workspace-operation-jobs*))
+                 (labels (nerimux::%workspace-job-labels)))
+            (expect repository)
+            (expect (null (nerimux/workspace-model:repository-worktrees repository)))
+            (expect (eq :running (nerimux::workspace-operation-job-state job)))
+            (expect (search "clone:running"
+                            (gethash (list :repository
+                                           (nerimux/workspace-model:repository-id repository))
+                                     labels)))
+            (nerimux::%enqueue-main-thread-callback
+             (lambda ()
+               (funcall clone-complete
+                        (nerimux/vcs::%make-clone-result
+                         :specification "github.com/team/repository"
+                         :local-path
+                         "/tmp/nerimux-ghq/github.com/team/repository.git"))))
+            (nerimux::%drain-main-thread-callbacks)
+            (expect (eq repository detached-repository))
+            (expect (string=
+                     "/tmp/nerimux-ghq/github.com/team/repository.git"
+                     (nerimux/workspace-model:repository-local-path repository)))
+            (with-stubbed-fdefinition
+                ((nerimux::%workspace-canonical-path
+                  (lambda (path)
+                    (cond
+                      ((string= path "/tmp/nerimux-clone-checkout") "/resolved/nerimux-clone-checkout")
+                      ((string= path "/private/tmp/nerimux-clone-checkout") "/resolved/nerimux-clone-checkout")
+                      (t nil)))))
+              (nerimux::%drain-main-thread-callbacks))
+            (expect (member worktree
+                            (nerimux/workspace-model:repository-worktrees repository)
+                            :test #'eq))
+            (expect (string= "refreshed-worktree"
+                             (nerimux/workspace-model:worktree-id
+                              (nerimux::client-conn-selected-worktree
+                               conn))))
+            (expect (eq :succeeded (nerimux::workspace-operation-job-state job)))
+            (expect (null (gethash job-key nerimux::*workspace-operation-jobs*)))
+            (expect (search "worktree created"
+                            (first (nerimux::client-conn-message-log conn))))))))
+
+  (it "keeps a failed clone visible on its repository row"
+    (with-fake-session (session)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (nerimux::*main-thread-callbacks* nil)
+             (nerimux::*workspace-operation-jobs* (make-hash-table :test #'equal))
+             (nerimux/vcs::*workspace-organizations* nil)
+             (clone-error-callback nil))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p
+               (lambda () t))
+             (nerimux/vcs:clone-bare-repository-async
+               (lambda (source &key on-start on-complete on-error callback-dispatch)
+                 (declare (ignore source on-complete))
+                 (setf clone-error-callback on-error)
+                 (funcall callback-dispatch
+                          (lambda ()
+                            (funcall on-start "github.com/team/failed-repository"))))))
+          (expect (nerimux::%client-clone-repository
+                   conn nil '("https://github.com/team/failed-repository")))
+          (nerimux::%drain-main-thread-callbacks)
+          (let* ((repository
+                   (loop for organization in (nerimux/vcs:workspace-organizations)
+                         thereis
+                         (find "github.com/team/failed-repository"
+                               (nerimux/workspace-model:organization-repositories
+                                organization)
+                               :key #'nerimux/workspace-model:repository-specification
+                               :test #'string=)))
+                 (job-key (list :repository
+                                (nerimux/workspace-model:repository-id repository)
+                                :clone)))
+            (nerimux::%enqueue-main-thread-callback
+             (lambda ()
+               (funcall clone-error-callback
+                        (make-condition 'nerimux/vcs:clone-error
+                                        :reason "transport rejected"))))
+            (nerimux::%drain-main-thread-callbacks)
+            (let ((job (gethash job-key nerimux::*workspace-operation-jobs*))
+                  (label (gethash (list :repository
+                                        (nerimux/workspace-model:repository-id repository))
+                                  (nerimux::%workspace-job-labels))))
+              (expect repository)
+              (expect (eq :failed (nerimux::workspace-operation-job-state job)))
+              (expect (search "clone:failed transport rejected" label))
+              (expect (null (nerimux/workspace-model:repository-worktrees repository)))))))))))

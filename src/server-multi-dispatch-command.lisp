@@ -40,6 +40,177 @@
   "True when a kill command carried --force."
   (and args (member "--force" args :test #'string=) t))
 
+(defun %client-clone-repository (conn target args)
+  (cond
+    ((or target (/= (length args) 1))
+     (%client-notify conn "clone takes one source")
+     t)
+    ((not (nerimux/vcs:vcs-package-available-p))
+     (%client-notify conn "VCS adapter unavailable")
+     t)
+    (t
+     (let ((repository nil)
+           (job nil)
+           (specification nil))
+       (labels ((find-repository (source)
+                  (loop for organization in (nerimux/vcs:workspace-organizations)
+                        thereis
+                        (find source
+                              (nerimux/workspace-model:organization-repositories
+                               organization)
+                              :key #'nerimux/workspace-model:repository-specification
+                              :test #'string=)))
+                (register-repository (source)
+                  (or (find-repository source)
+                      (let* ((parts (uiop:split-string source :separator '(#\/)))
+                             (organization
+                               (progn
+                                 (unless (and (= (length parts) 3)
+                                              (every (lambda (part)
+                                                       (plusp (length part)))
+                                                     parts))
+                                   (error "invalid canonical clone specification"))
+                                 (nerimux/workspace-model:make-organization
+                                  :host (first parts)
+                                  :name (second parts))))
+                             (repository
+                               (nerimux/workspace-model:make-repository
+                                :specification source)))
+                        (nerimux/workspace-model:organization-add-repository
+                         organization repository)
+                        (nerimux/vcs:merge-workspace-organizations
+                         (list organization))
+                        (or (find-repository source) repository))))
+                (ensure-job ()
+                  (setf repository (register-repository specification))
+                  (unless (and job
+                               (eq job
+                                   (gethash
+                                    (list :repository
+                                          (nerimux/workspace-model:repository-id
+                                           repository)
+                                          :clone)
+                                    *workspace-operation-jobs*))
+                               (eq repository
+                                   (workspace-operation-job-object job))
+                               (member (workspace-operation-job-state job)
+                                       '(:queued :running)))
+                    (setf job
+                          (%workspace-job-begin
+                           :repository
+                           (nerimux/workspace-model:repository-id repository)
+                           :clone
+                           repository)))
+                  job)
+                (fail (reason command)
+                  (when specification
+                    (ensure-job)
+                    (%workspace-job-update job repository :failed :outcome reason))
+                  (when (and specification (%client-live-p conn))
+                    (%client-log-process conn command nil reason))
+                  (when (%client-live-p conn)
+                    (%client-notify conn (format nil "clone failed: ~A" reason)))
+                  (%mark-dirty))
+                (clone-failed (condition)
+                  (fail (if (typep condition 'nerimux/vcs:clone-error)
+                            (nerimux/vcs:clone-error-reason condition)
+                            "clone failed")
+                        (and specification
+                             (format nil "ghq get --bare ~A" specification))))
+                (worktree-failed (condition)
+                  (declare (ignore condition))
+                  (fail "default branch worktree could not be created"
+                        "git worktree add --detach"))
+                (worktree-complete (receipt)
+                  (ensure-job)
+                  (let ((worktree
+                          (nerimux/vcs:detached-worktree-result-worktree receipt)))
+                    (if (or (null worktree)
+                            (nerimux/vcs:detached-worktree-result-refresh-error
+                             receipt))
+                        (worktree-failed nil)
+                        (progn
+                          (unless
+                              (member worktree
+                                      (nerimux/workspace-model:repository-worktrees
+                                       repository)
+                                      :test #'eq)
+                            (nerimux/workspace-model:repository-add-worktree
+                             repository worktree))
+                          (%workspace-job-update job repository :succeeded)
+                          (when (nerimux/vcs:detached-worktree-result-fetch-error
+                                 receipt)
+                            (%client-log-process
+                             conn "git fetch origin" nil
+                             "fetch failed; used local refs"))
+                          (%client-log-process
+                           conn
+                           (format nil
+                                   "ghq get --bare ~A; git worktree add --detach"
+                                   specification)
+                           t
+                           "")
+                          (when (%client-live-p conn)
+                            (%set-client-selected-worktree conn worktree)
+                            (%client-notify
+                             conn
+                             (format nil "worktree created: ~A"
+                                     (%worktree-display-path
+                                      (nerimux/workspace-model:worktree-path
+                                       worktree))))
+                            (%refresh-client-picker
+                             conn
+                             :on-complete
+                             (lambda (organizations)
+                               (let ((refreshed-worktree
+                                       (%workspace-find-worktree-for-attach
+                                        (nerimux/workspace-model:worktree-path worktree)
+                                        organizations)))
+                                 (when (and refreshed-worktree
+                                            (or (null (client-conn-selected-worktree conn))
+                                                (eq worktree
+                                                    (client-conn-selected-worktree conn))))
+                                   (%set-client-selected-worktree
+                                    conn refreshed-worktree))))))
+                          (%mark-dirty)))))
+                (create-default-worktree ()
+                  (ensure-job)
+                  (%workspace-job-update job repository :running :phase :worktree)
+                  (handler-case
+                      (nerimux/vcs:create-detached-worktree-async
+                       repository
+                       :callback-dispatch #'%enqueue-main-thread-callback
+                       :on-start
+                       (lambda ()
+                         (ensure-job)
+                         (%workspace-job-update job repository :running
+                                                :phase :worktree))
+                       :on-error #'worktree-failed
+                       :on-complete #'worktree-complete)
+                    (error (condition)
+                      (worktree-failed condition))))
+                (clone-complete (result)
+                  (ensure-job)
+                  (setf (nerimux/workspace-model:repository-local-path repository)
+                        (nerimux/vcs:clone-result-local-path result))
+                  (create-default-worktree))
+                (clone-started (source)
+                  (setf specification source)
+                  (ensure-job)
+                  (%workspace-job-update job repository :running)
+                  (%client-notify conn (format nil "cloning ~A" source))
+                  (%mark-dirty)))
+         (handler-case
+             (nerimux/vcs:clone-bare-repository-async
+              (first args)
+              :callback-dispatch #'%enqueue-main-thread-callback
+              :on-start #'clone-started
+              :on-complete #'clone-complete
+              :on-error #'clone-failed)
+           (error (condition)
+             (clone-failed condition)))
+         t)))))
+
 (defun %client-complete-workspace (conn)
   (let* ((selected (client-conn-selected-worktree conn))
          (worktree (and selected (%workspace-find-worktree (worktree-path selected)))))
@@ -106,7 +277,6 @@
                                (mapcar #'%worktree-prune-confirm-label dirty))))))
         (lambda () (%client-prune-workspaces conn :all all))))))
   t)
-
 (define-command-rules %handle-client-ui-command
                       (session conn cmd target args)
                       "Apply a client-local UI command, returning true when CMD is recognized."
@@ -171,6 +341,7 @@
                       ((:worktree-create :create-worktree :wt-create)
                        (or (%client-report-missing-target conn target)
                            (%client-create-worktree conn target args)))
+                      (:clone (%client-clone-repository conn target args))
                       ((:workspace-complete :wt-complete)
                        (if (eq cmd :workspace-complete)
                            (progn

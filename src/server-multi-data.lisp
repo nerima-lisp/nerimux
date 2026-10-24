@@ -48,6 +48,7 @@
     :wt-prune
     :wt-prune-confirm
     :wt-complete
+    :clone
     :workspace-complete
     :workspace-prune
     :workspace-prune-all
