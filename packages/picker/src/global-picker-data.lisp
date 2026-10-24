@@ -5,14 +5,24 @@
 (defstruct
     (picker-item
      (:constructor %make-picker-item
-                   (&key id kind label organization repository worktree pane)))
+                   (&key id kind label organization repository worktree pane data)))
   id
   kind
   label
   organization
   repository
   worktree
-  pane)
+  pane
+  data)
+(defun make-picker-item (&key id kind label organization repository worktree pane data)
+  (%make-picker-item :id id
+                     :kind kind
+                     :label label
+                     :organization organization
+                     :repository repository
+                     :worktree worktree
+                     :pane pane
+                     :data data))
 
 (defun %picker-string (value)
   (cond
@@ -94,6 +104,7 @@
     (:repository "repo")
     (:worktree "  wt ")
     (:pane "pane")
+    (:branch "branch")
     (otherwise "     ")))
 
 (defun picker-item-row-text (item)

@@ -3,9 +3,12 @@
 (declaim (special *workspace-catalog-loaded-p* *workspace-scan-progress*))
 
 (defun %client-picker-items (conn)
-  (or (client-conn-picker-items conn)
-      (setf (client-conn-picker-items conn) (nerimux/picker:build-global-picker-items
-                                             (nerimux/vcs:workspace-organizations)))))
+  (if (eq :branch (client-conn-picker-mode conn))
+      (client-conn-picker-items conn)
+      (or (client-conn-picker-items conn)
+          (setf (client-conn-picker-items conn)
+                (nerimux/picker:build-global-picker-items
+                 (nerimux/vcs:workspace-organizations))))))
 
 (defun %picker-clamp-index (conn items)
   (setf (client-conn-picker-index conn) (if items
@@ -269,8 +272,10 @@
                                          (cons conn (copy-list *clients*)))
                           :test #'eq))
                  (%rebind-client-selection client organizations)
-                 (setf (client-conn-picker-items client)
-                       (nerimux/picker:build-global-picker-items organizations))
+                 (unless (eq :branch (client-conn-picker-mode client))
+                   (setf (client-conn-picker-items client)
+                         (nerimux/picker:build-global-picker-items
+                          organizations)))
                  (%picker-clamp-index client
                                       (%client-picker-visible-items client)))
                (when (and on-complete (%client-live-p conn))
@@ -304,7 +309,7 @@
   (make-hash-table :test #'eq :weakness :key)
   "Each client's saved picker view and pane location, keyed by connection.")
 
-(defun %open-client-picker (conn)
+(defun %open-client-picker (conn &key (mode :global) repository)
   (when (%reject-pending-worktree-attachment conn :pane nil)
     (return-from %open-client-picker nil))
   (setf (gethash conn *client-picker-return-targets*)
@@ -315,9 +320,15 @@
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
         (client-conn-picker-index conn) 0
-        (client-conn-picker-items conn) (nerimux/picker:build-global-picker-items
-                                         (nerimux/vcs:workspace-organizations)))
-  (%refresh-client-picker conn)
+        (client-conn-picker-mode conn) mode
+        (client-conn-picker-repository conn) repository
+        (client-conn-picker-items conn)
+        (if (eq mode :branch)
+            nil
+            (nerimux/picker:build-global-picker-items
+             (nerimux/vcs:workspace-organizations))))
+  (unless (eq mode :branch)
+    (%refresh-client-picker conn))
   (%mark-dirty)
   conn)
 
@@ -346,7 +357,9 @@
   (%set-client-modal conn nil)
   (setf (client-conn-picker-query conn) ""
         (client-conn-picker-regex-p conn) nil
-        (client-conn-picker-index conn) 0)
+        (client-conn-picker-index conn) 0
+        (client-conn-picker-mode conn) :global
+        (client-conn-picker-repository conn) nil)
   (%mark-dirty)
   conn)
 

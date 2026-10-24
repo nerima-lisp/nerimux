@@ -1,4 +1,164 @@
 (in-package #:nerimux/test)
+(describe "server-multi-worktree-branch-picker"
+  (it "branch-picker-opens-with-sanitized-filterable-candidates"
+    (with-fake-session (session)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "branch-picker-org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "branch-picker-repo" :organization organization
+                :specification "github.com/team/repo"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (candidates
+               (list
+                (list :branch (format nil "feature/control~C[31mred" (code-char 27))
+                      :kind :local :worktree nil)
+                (list :branch "feature/remote" :kind :remote
+                      :remote "origin" :worktree :already-checked-out))))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux/vcs:list-worktree-branch-candidates-async
+              (lambda (received-repository &key on-complete on-error
+                                               callback-dispatch)
+                (declare (ignore callback-dispatch))
+                (expect (eq repository received-repository))
+                (expect on-error)
+                (funcall on-complete candidates)
+                :branch-scan)))
+          (nerimux::%handle-multi-key-message
+           session conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+          (nerimux::%handle-multi-key-message session conn #(98))
+          (expect (eq :picker (nerimux::client-conn-modal conn)))
+          (let* ((items (nerimux::client-conn-picker-items conn))
+                 (labels (mapcar #'nerimux/picker:picker-item-label items)))
+            (expect (= 2 (length items)))
+            (expect (every (lambda (item)
+                             (eq :branch (nerimux/picker:picker-item-kind item)))
+                           items))
+            (expect (some (lambda (label) (search "feature/controlred" label))
+                          labels))
+            (expect (some (lambda (label) (search "in worktree" label))
+                          labels))
+            (expect (not (some (lambda (label)
+                                 (position (code-char 27) label))
+                               labels)))
+            (expect (= 1
+                       (length
+                        (nerimux/picker:filter-global-picker-items
+                         items "origin")))))))))
+  (it "branch-picker-selects-local-and-remote-through-worktree-create"
+    (with-fake-session (session)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "branch-picker-select-org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "branch-picker-select-repo" :organization organization
+                :specification "github.com/team/repo"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (candidates
+               (list (list :branch "feature/local" :kind :local :worktree nil)
+                     (list :branch "feature/remote" :kind :remote
+                           :remote "origin" :worktree :checked-out)))
+             (calls nil))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux/vcs:list-worktree-branch-candidates-async
+              (lambda (received-repository &key on-complete on-error
+                                               callback-dispatch)
+                (declare (ignore callback-dispatch))
+                (expect (eq repository received-repository))
+                (expect on-error)
+                (funcall on-complete candidates)
+                :branch-scan))
+             (nerimux::%client-create-worktree-now
+              (lambda (received-repository branch received-conn received-session
+                       &rest options)
+                (declare (ignore options))
+                (push (list received-repository branch received-conn received-session)
+                      calls)
+                t)))
+          (flet ((open-branch-picker ()
+                   (nerimux::%handle-multi-key-message
+                    session conn
+                    (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+                   (nerimux::%handle-multi-key-message session conn #(98))))
+            (open-branch-picker)
+            (nerimux::%set-client-picker-query conn "feature/local")
+            (nerimux::%handle-multi-key-message session conn #(13))
+            (expect (equal (list repository "feature/local" conn session)
+                           (first calls)))
+            (expect (null (nerimux::client-conn-modal conn)))
+            (open-branch-picker)
+            (nerimux::%set-client-picker-query conn "origin/feature/remote")
+            (nerimux::%handle-multi-key-message session conn #(13))
+            (expect (equal (list repository "origin/feature/remote" conn session)
+                           (first calls)))
+            (expect (= 2 (length calls)))
+            (expect (null (nerimux::client-conn-modal conn))))))))
+  (it "branch-picker-confirms-raw-unmatched-query-through-create-route"
+    (with-fake-session (session)
+      (let* ((organization
+               (nerimux/workspace-model:make-organization
+                :id "branch-picker-confirm-org" :host "github.com" :name "team"))
+             (repository
+               (nerimux/workspace-model:make-repository
+                :id "branch-picker-confirm-repo" :organization organization
+                :specification "github.com/team/repo"))
+             (conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (raw-branch (format nil "feature/control~C[31mred" (code-char 27)))
+             (create-call nil))
+        (nerimux/workspace-model:organization-add-repository organization repository)
+        (nerimux::%set-client-selected-tree-object conn repository)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux/vcs:list-worktree-branch-candidates-async
+              (lambda (received-repository &key on-complete on-error
+                                               callback-dispatch)
+                (declare (ignore received-repository on-error callback-dispatch))
+                (funcall on-complete nil)
+                :branch-scan))
+             (nerimux/vcs:create-worktree-async
+              (lambda (received-repository &key branch path force on-complete on-error
+                                                   callback-dispatch &allow-other-keys)
+                (declare (ignore path force on-complete on-error callback-dispatch))
+                (setf create-call (list received-repository branch))
+                t)))
+          (nerimux::%handle-multi-key-message
+           session conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+          (nerimux::%handle-multi-key-message session conn #(98))
+          (nerimux::%set-client-picker-query conn raw-branch)
+          (nerimux::%handle-multi-key-message session conn #(13))
+          (expect (eq :confirm (nerimux::client-conn-modal conn)))
+          (expect (equal (cons "branch" "feature/controlred")
+                         (assoc "branch"
+                                (nerimux/renderer:confirm-view-fields
+                                 (nerimux::client-conn-confirm-view conn))
+                                :test #'string=)))
+          (nerimux::%handle-multi-key-message session conn #(121))
+          (expect (equal (list repository raw-branch) create-call))
+          (expect (search "opening worktree feature/controlred"
+                          (first (nerimux::client-conn-message-log conn))))
+          (expect (null (nerimux::client-conn-modal conn)))
+          (nerimux::%handle-multi-key-message
+           session conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
+          (nerimux::%handle-multi-key-message session conn #(98))
+          (nerimux::%set-client-picker-query conn "-new-branch")
+          (nerimux::%handle-multi-key-message session conn #(13))
+          (expect (eq :confirm (nerimux::client-conn-modal conn)))
+          (nerimux::%handle-multi-key-message session conn #(121))
+          (expect (search "a name cannot start with -"
+                          (first (nerimux::client-conn-message-log conn))))
+          (expect (null (nerimux::client-conn-modal conn))))))));
+
 
 (describe "server-multi-worktree-command-suite"
   (it "kill-command-replies-drops-client-and-forwards-success"
@@ -801,7 +961,7 @@
                 (fdefinition 'nerimux/vcs:lock-worktree-async) lock-fn
                 (fdefinition 'nerimux/vcs:unlock-worktree-async) unlock-fn)))))
 
-  (it "the-w-transient-reaches-the-real-worktree-operations"
+  (it "branch-picker-requires-a-selected-repository"
     (with-fake-session (s)
       (let ((conn (%make-test-conn))
             (nerimux::*clients* nil))
@@ -822,7 +982,7 @@
         (nerimux::%handle-multi-key-message
          s conn (cl-codec-kit:string-to-octets "w" :encoding :utf-8))
         (nerimux::%handle-multi-key-message s conn #(98))
-        (expect (search "wt-create"
+        (expect (search "select a repository first"
                         (first (nerimux::client-conn-message-log conn)))))))
 
   (it "the-w-transient-confirms-before-pruning"

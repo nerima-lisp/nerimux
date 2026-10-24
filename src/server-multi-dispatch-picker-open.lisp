@@ -75,7 +75,34 @@
         pane
         (%client-worktree-pane session worktree))))
 
+(defun %select-client-branch-picker-item (session conn item)
+  (when (%reject-pending-worktree-attachment conn)
+    (return-from %select-client-branch-picker-item nil))
+  (let ((repository (client-conn-picker-repository conn))
+        (candidate (and item (nerimux/picker:picker-item-data item)))
+        (query (client-conn-picker-query conn)))
+    (cond
+      (candidate
+       (let ((branch (%client-branch-candidate-ref candidate)))
+         (%close-client-picker conn :keep-view t)
+         (%client-create-worktree-now repository branch conn session)))
+      ((and repository (stringp query) (plusp (length query)))
+       (let ((display-branch (%client-branch-display-text query)))
+         (%close-client-picker conn :session session)
+         (%open-confirm-view
+          conn "CREATE WORKTREE"
+          (list (cons "branch" display-branch))
+          (lambda ()
+            (%client-create-worktree
+             conn repository (list "--branch" query "--confirm"))))
+         t))
+      (t nil))))
+
 (defun %select-client-picker-item (session conn)
+  (when (eq :branch (client-conn-picker-mode conn))
+    (return-from %select-client-picker-item
+      (%select-client-branch-picker-item
+       session conn (%picker-selected-item conn))))
   (let* ((item (%picker-selected-item conn))
          (worktree (and item (%picker-item-worktree item)))
          (object

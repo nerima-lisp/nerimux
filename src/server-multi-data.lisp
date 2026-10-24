@@ -175,6 +175,8 @@
   (attach-target nil)
   (attach-cwd nil)
   (picker-items nil)
+  (picker-mode :global)
+  (picker-repository nil)
   (picker-query "" :type string)
   (picker-regex-p nil :type boolean)
   (picker-index 0 :type fixnum)

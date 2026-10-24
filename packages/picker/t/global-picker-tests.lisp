@@ -1,4 +1,26 @@
 (in-package #:nerimux/test/picker)
+(describe "branch picker item constructor"
+  (it "branch-picker-item-constructor-exposes-row-data"
+    (let* ((constructor (find-symbol "MAKE-PICKER-ITEM" "NERIMUX/PICKER"))
+           (data-accessor (find-symbol "PICKER-ITEM-DATA" "NERIMUX/PICKER"))
+           (data (list :branch "main" :kind :local))
+           (item (and constructor
+                      (fboundp constructor)
+                      (funcall (symbol-function constructor)
+                               :id "branch/0"
+                               :kind :branch
+                               :label "local main"
+                               :data data))))
+      (expect (eq :external
+                  (nth-value 1
+                             (find-symbol "MAKE-PICKER-ITEM" "NERIMUX/PICKER"))))
+      (expect (eq :external
+                  (nth-value 1
+                             (find-symbol "PICKER-ITEM-DATA" "NERIMUX/PICKER"))))
+      (expect item)
+      (when (and item data-accessor (fboundp data-accessor))
+        (expect (eq data (funcall (symbol-function data-accessor) item)))))))
+
 
 (describe "global picker"
           (it

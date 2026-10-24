@@ -124,8 +124,10 @@
                            (list :call (lambda (session conn)
                                          (declare (ignore session))
                                          (%confirm-client-prune-workspaces conn t))))
-                     (list #\b "create with a chosen branch name"
-                           (list :stub "use `: wt-create --branch <name> --confirm`")))))
+                     (list #\b "browse worktree branches"
+                           (list :call (lambda (session conn)
+                                         (%client-start-worktree-branch-picker
+                                          session conn)))))))
    (cons #\?
          (list "Dispatch" nil
                (list (list #\c "Commit" (list :open-transient #\c))
