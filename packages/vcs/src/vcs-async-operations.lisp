@@ -285,7 +285,7 @@
                        (when stop-p
                          (dotimes (index status-thread-count)
                            (declare (ignore index))
-                           (sb-thread:signal-semaphore status-available))))
+                           (sb-thread:signal-semaphore status-available)))))
                    (complete-one (repository entry)
                      (let ((complete-p
                              (sb-thread:with-recursive-lock
@@ -502,7 +502,7 @@
                      #'read-worktrees
                      :name (format nil "nerimux-vcs-worktree-status-~D" index))
                     threads))
-            (nreverse threads)))))))
+            (nreverse threads))))))
 (defun refresh-workspace-status-async (&key
                                        (organizations *workspace-organizations*)
                                        on-start
