@@ -1,9 +1,6 @@
 (in-package #:nerimux/test/vcs)
 
-(defun %fetch-test-git (directory &rest arguments)
-  (string-trim '(#\Newline #\Return)
-               (uiop:run-program (append (list "git" "-C" directory) arguments)
-                                 :output :string :error-output :string)))
+(defun %fetch-test-git (directory &rest arguments) (apply #'%worktree-path-test-git directory arguments))
 
 (defun %detached-test-create (repository)
   (let ((receipt nil) (errors nil))

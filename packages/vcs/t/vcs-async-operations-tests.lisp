@@ -41,8 +41,7 @@
        (ensure-directories-exist primary)
        (unwind-protect
            (flet ((git (&rest arguments)
-                    (uiop:run-program (append (list "git" "-C" (namestring primary)) arguments)
-                                      :output :string :error-output :string)))
+                    (apply #'%worktree-path-test-git (namestring primary) arguments)))
              (git "init")
              (%write-prune-fixture-file (merge-pathnames "tracked" primary) "initial")
              (%write-prune-fixture-file (merge-pathnames ".gitignore" primary) "ignored")
@@ -78,15 +77,14 @@
          (%write-prune-fixture-file (merge-pathnames "untracked" root) "other")
          (expect (signals error (nerimux/vcs:validate-worktree-prune-snapshot worktree untracked))))
        (let ((unstaged (nerimux/vcs::%read-worktree-prune-snapshot worktree)))
-         (uiop:run-program (list "git" "-C" (namestring root) "add" "tracked") :output :string)
+         (%worktree-path-test-git (namestring root) "add" "tracked")
          (expect (signals error (nerimux/vcs:validate-worktree-prune-snapshot worktree unstaged)))))))
   (it "real Git symbolic HEAD at identical commit invalidates consent"
     (%call-with-prune-git-fixture
      (lambda (worktree root)
        (let ((snapshot (nerimux/vcs::%read-worktree-prune-snapshot worktree)))
          (expect (nerimux/vcs:validate-worktree-prune-snapshot worktree snapshot))
-         (uiop:run-program (list "git" "-C" (namestring root) "checkout" "--detach" "HEAD")
-                           :output :string :error-output :string)
+         (%worktree-path-test-git (namestring root) "checkout" "--detach" "HEAD")
          (expect (signals error (nerimux/vcs:validate-worktree-prune-snapshot worktree snapshot)))))))
   (it "real Git ignored content and dangling symlinks are refused without deletion"
     (%call-with-prune-git-fixture

@@ -208,15 +208,19 @@ running git at all; anything else is asked directly."
           (error () nil)))))
 
 (defun %worktrees-directory-ignored-p (repository)
-  "True when git ignores REPOSITORY's .worktrees directory.
+  "True when git ignores the REPOSITORY .worktrees directory.
 
-The query names a path inside .worktrees rather than the directory itself: a
-`.worktrees/` ignore pattern only matches a directory that already exists, and
-the first worktree is created before it does."
+The query uses a path inside .worktrees so the rule works before it exists."
   (handler-case
       (progn
-        (vcs-kit:git-check-ignore (%repository-checked-handle repository)
-                                  "-q" "--" ".worktrees/name")
+        ;; VCS-KIT:git-check-ignore does not accept the fixture environment update.
+        (if *worktree-test-environment-update*
+            (%run-git-read
+             (%string-value
+              (nerimux/workspace-model:repository-local-path repository))
+             "check-ignore" "-q" "--" ".worktrees/name")
+            (vcs-kit:git-check-ignore (%repository-checked-handle repository)
+                                      "-q" "--" ".worktrees/name"))
         t)
     (error () nil)))
 
