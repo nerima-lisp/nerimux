@@ -993,15 +993,11 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
         (expect (and replacement-position
                      (null (search replacement-message
                                    log-output
-                                   :start2 (1+ replacement-position))))
-                "Replacement-marker fallback should be logged once.")
+                                   :start2 (1+ replacement-position)))))
         (expect (and limit-position
                      (null (search limit-message
                                    log-output
-                                   :start2 (1+ limit-position))))
-                "Oversized-pathspec fallback should be logged once.")
+                                   :start2 (1+ limit-position)))))
         (expect (equal '(("diff" "--numstat" "-z")
-                         ("diff" "--numstat" "-z"))
-                       (reverse commands))
-                "Each fallback should use the unfiltered numstat command.")))))
+                         ("diff" "--numstat" "-z")) (reverse commands)))))))
 
