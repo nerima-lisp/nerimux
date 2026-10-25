@@ -844,9 +844,9 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
                         "commit" "-q" "-m" "invalid path"))))
         (run-fixture-command
          "insert raw tracked path into Git index"
-         (list "python3" "-c"
-               "import subprocess,sys; repo=sys.argv[1].encode(); blob=subprocess.run([b'git',b'-C',repo,b'hash-object',b'-w',b'--stdin'],input=b'before\\n',stdout=subprocess.PIPE,check=True).stdout.strip(); data=b'100644 '+blob+b' 0\\t\\xffbad.txt\\0'; subprocess.run([b'git',b'-C',repo,b'update-index',b'-z',b'--index-info'],input=data,check=True)"
-               directory))
+         (list "/bin/sh" "-c"
+               "blob=$(printf 'before\\n' | git -C \"$1\" hash-object -w --stdin) && { printf '100644 %s 0\\t' \"$blob\"; printf '\\377bad.txt\\000'; } | git -C \"$1\" update-index -z --index-info"
+               "sh" directory))
         (commit)
         (let* ((tracked-path-hex
                  (run-fixture-command
