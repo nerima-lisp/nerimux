@@ -15,7 +15,7 @@
                   (let ((handle (gensym "SCAN-")))
                     (push (list* :handle handle options) scans)
                     handle)))
-              (nerimux/vcs:refresh-repositories-async
+              (nerimux/vcs::%refresh-repositories-with-worktree-queue
                 (lambda (repositories &rest options)
                   (push (list* :repositories repositories options) statuses)
                   nil)))
