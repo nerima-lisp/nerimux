@@ -2105,116 +2105,116 @@
                                                    (expect (zerop in-flight))
                                                    (expect
                                                     (= 2 completed-count))))))
-          (it "settles a prepared request when its fallback diagnostics signal"
-              (let* ((repository
-                      (nerimux/workspace-model:make-repository :specification
-                                                               "workspace-owner/preparation-diagnostic-failure"
-                                                               :local-path
-                                                               "/tmp/preparation-diagnostic-failure"))
-                     (worktree
-                      (nerimux/workspace-model:make-worktree :repository
-                                                             repository
-                                                             :path
-                                                             "/tmp/preparation-diagnostic-failure/main"))
+          (it "settles every request when preparation diagnostics signal"
+              (let* ((repositories
+                       (loop for repository-index from 1 to 5
+                             collect
+                               (nerimux/workspace-model:make-repository
+                                :specification
+                                (format nil
+                                        "workspace-owner/preparation-diagnostic-failure-~D"
+                                        repository-index)
+                                :local-path
+                                (format nil
+                                        "/tmp/preparation-diagnostic-failure-~D"
+                                        repository-index))))
                      (organization
-                      (nerimux/workspace-model:make-organization :host
-                                                                 "workspace-owner"
-                                                                 :name
-                                                                 "preparation-diagnostic-failure"
-                                                                 :repositories
-                                                                 (list
-                                                                  repository)))
+                       (nerimux/workspace-model:make-organization
+                        :host "workspace-owner"
+                        :name "preparation-diagnostic-failure"
+                        :repositories repositories))
                      (probe-lock
-                      (cl-concurrent-kit:make-lock :name
-                                                   "preparation diagnostic probe"))
+                       (cl-concurrent-kit:make-lock
+                        :name "preparation diagnostic probe"))
                      (completed-event (sb-thread:make-semaphore :count 0))
                      (real-signal-semaphore
-                      (symbol-function 'sb-thread:signal-semaphore))
+                       (symbol-function 'sb-thread:signal-semaphore))
                      (signal-count 0)
                      (diagnostic-count 0)
                      (read-count 0)
+                     (start-count 0)
                      (error-count 0)
                      (completion-count 0)
                      (threads nil))
-                (nerimux/workspace-model:repository-add-worktree repository
-                                                                 worktree)
-                (with-stubbed-fdefinition
-                 ((nerimux/vcs::%repository-status-shared-stashes
-                   (lambda (current)
-                     (declare (ignore current))
-                     nil))
-                  (nerimux/vcs::%read-worktree-status
-                   (lambda (current &key stashes)
-                     (declare (ignore current stashes))
-                     (cl-concurrent-kit:with-lock-held (probe-lock)
-                                                       (incf read-count))
-                     :unexpected))
-                  (sb-thread:signal-semaphore
-                   (lambda (semaphore &optional (count 1))
-                     (if (= 1
-                            (cl-concurrent-kit:with-lock-held (probe-lock)
-                                                              (incf
-                                                               signal-count)))
-                         (error "Fixture queue signal failed")
-                         (funcall real-signal-semaphore semaphore count))))
-                  (log-kit:emit-log
-                   (lambda (logger level message fields)
-                     (declare (ignore logger level message fields))
-                     (cl-concurrent-kit:with-lock-held (probe-lock)
-                                                       (incf diagnostic-count))
-                     (error "Fixture diagnostic logger failed"))))
-                 (unwind-protect
-                     (progn
-                       (setf threads (nerimux/vcs:refresh-workspace-status-async
-                                      :organizations
-                                      (list organization)
-                                      :callback-dispatch
-                                      (lambda (callback)
-                                        (funcall callback))
-                                      :status-applier
-                                      (lambda (current updates)
-                                        (declare (ignore current updates)))
-                                      :on-error
-                                      (lambda (current condition)
-                                        (declare (ignore current condition))
-                                        (cl-concurrent-kit:with-lock-held
-                                         (probe-lock)
-                                         (incf error-count)))
-                                      :on-complete
-                                      (lambda (completed-organizations)
-                                        (expect
-                                         (equal (list organization)
-                                                completed-organizations))
-                                        (cl-concurrent-kit:with-lock-held
-                                         (probe-lock)
-                                         (incf completion-count))
-                                        (sb-thread:signal-semaphore
-                                         completed-event))))
-                       (expect (= 2 (length threads)))
-                       (expect
-                        (sb-thread:wait-on-semaphore completed-event :timeout 5))
-                       (dolist (thread threads)
-                         (handler-case (cl-concurrent-kit:join-thread thread
-                                                                      :timeout
-                                                                      5)
-                           (error (condition)
-                             (expect
-                              (search "Fixture diagnostic logger failed"
-                                      (princ-to-string condition))))))
-                       (expect
-                        (every
-                         (lambda (thread)
-                           (not (sb-thread:thread-alive-p thread)))
-                         threads))
-                       (setf threads nil))
-                   (dolist (thread threads)
-                     (ignore-errors
-                      (cl-concurrent-kit:join-thread thread :timeout 5))))
-                 (cl-concurrent-kit:with-lock-held (probe-lock)
-                                                   (expect (>= signal-count 2))
-                                                   (expect
-                                                    (= 2 diagnostic-count))
-                                                   (expect (zerop read-count))
-                                                   (expect (= 1 error-count))
-                                                   (expect
-                                                    (= 1 completion-count)))))))
+                (dolist (repository repositories)
+                  (nerimux/workspace-model:repository-add-worktree
+                   repository
+                   (nerimux/workspace-model:make-worktree
+                    :repository repository
+                    :path
+                    (format nil "~A/main"
+                            (nerimux/workspace-model:repository-local-path repository)))))
+                (sb-ext:without-package-locks
+                  (with-stubbed-fdefinition
+                   ((nerimux/vcs::%repository-status-shared-stashes
+                     (lambda (repository)
+                       (declare (ignore repository))
+                       nil))
+                    (nerimux/vcs::%read-worktree-status
+                     (lambda (worktree &key stashes)
+                       (declare (ignore worktree stashes))
+                       (cl-concurrent-kit:with-lock-held (probe-lock)
+                         (incf read-count))
+                       :unexpected))
+                    (sb-thread:signal-semaphore
+                     (lambda (semaphore &optional (count 1))
+                       (let ((current-count
+                               (cl-concurrent-kit:with-lock-held (probe-lock)
+                                 (incf signal-count))))
+                         (if (<= current-count 4)
+                             (error "Fixture queue signal failed")
+                             (funcall real-signal-semaphore semaphore count)))))
+                    (log-kit:emit-log
+                     (lambda (logger level message fields)
+                       (declare (ignore logger level message fields))
+                       (cl-concurrent-kit:with-lock-held (probe-lock)
+                         (incf diagnostic-count))
+                       (error "Fixture diagnostic logger failed"))))
+                   (unwind-protect
+                        (progn
+                          (setf threads
+                                (nerimux/vcs:refresh-workspace-status-async
+                                 :organizations (list organization)
+                                 :callback-dispatch
+                                 (lambda (callback) (funcall callback))
+                                 :status-applier
+                                 (lambda (repository updates)
+                                   (declare (ignore repository updates)))
+                                 :on-start
+                                 (lambda (repository)
+                                   (declare (ignore repository))
+                                   (cl-concurrent-kit:with-lock-held (probe-lock)
+                                     (incf start-count)))
+                                 :on-error
+                                 (lambda (repository condition)
+                                   (declare (ignore repository condition))
+                                   (cl-concurrent-kit:with-lock-held (probe-lock)
+                                     (incf error-count)))
+                                 :on-complete
+                                 (lambda (completed-organizations)
+                                   (expect (equal (list organization)
+                                                  completed-organizations))
+                                   (cl-concurrent-kit:with-lock-held (probe-lock)
+                                     (incf completion-count))
+                                   (sb-thread:signal-semaphore completed-event))))
+                          (expect
+                           (= (+ (min nerimux/vcs::*workspace-worktree-status-worker-limit* 5)
+                                 (min nerimux/vcs::+workspace-status-preparation-worker-limit+
+                                      5))
+                              (length threads)))
+                          (expect (sb-thread:wait-on-semaphore completed-event :timeout 10))
+                          (dolist (thread threads)
+                            (cl-concurrent-kit:join-thread thread :timeout 5))
+                          (expect
+                           (every
+                            (lambda (thread) (not (sb-thread:thread-alive-p thread)))
+                            threads))
+                          (setf threads nil))
+                     (dolist (thread threads)
+                       (ignore-errors (cl-concurrent-kit:join-thread thread :timeout 1)))))
+                (cl-concurrent-kit:with-lock-held (probe-lock)
+                  (expect (= 5 start-count))
+                  (expect (= 4 diagnostic-count))
+                  (expect (= 1 read-count))
+                  (expect (= 4 error-count))
+                  (expect (= 1 completion-count)))))))
