@@ -638,9 +638,9 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
       (expect (= 1 (nerimux/vcs::%worktree-status-update-additions update)))
       (expect (= 0 (nerimux/vcs::%worktree-status-update-deletions update))))))
 (describe "vcs numstat literal pathspec"
-  (it "passes raw changed paths after the separator with literal pathspec magic"
+  (it "numstat regression passes raw changed paths after the separator with top-level literal pathspec magic"
     (let ((command-arguments nil)
-          (paths (list "- leading [glob]*? (x):.txt" "space name.txt")))
+          (paths (list "- leading [glob]* (x):.txt" "space name.txt")))
       (with-stubbed-fdefinition
           ((nerimux/vcs::%run-git-read
             (lambda (directory subcommand &rest arguments)
@@ -655,8 +655,8 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
       (expect
        (equal
         (list "diff" "--numstat" "-z" "--"
-              ":(literal)- leading [glob]*? (x):.txt"
-              ":(literal)space name.txt")
+              ":(top,literal)- leading [glob]* (x):.txt"
+              ":(top,literal)space name.txt")
         command-arguments)))))
 (describe "vcs numstat path selection line-count equivalence"
   (it "matches full numstat for renames, conflicts, binary, and special paths"
@@ -772,4 +772,193 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
           (expect (= 1 (vcs-kit:numstat-entry-additions special-entry)))
           (expect (= 1 (vcs-kit:numstat-entry-deletions special-entry)))
           (expect conflict-entries))))))
+(describe "vcs numstat regression"
+  (it "numstat regression treats a glob name literally beside a matching sibling under inherited GIT_LITERAL_PATHSPECS=1"
+    (let* ((directory (%run-git-read-test-repo))
+           (target "glob[ab]*.txt")
+           (sibling "globa-match.txt"))
+      (flet ((write-file (name content)
+               (uiop:run-program
+                (list "/bin/sh" "-c"
+                      "printf %s \"$2\" > \"$1\""
+                      "sh" (format nil "~A~A" directory name) content)
+                :output :string :error-output :string))
+             (commit (message)
+               (uiop:run-program
+                (list "git" "-C" directory
+                      "-c" "user.name=Fixture"
+                      "-c" "user.email=fixture@example.invalid"
+                      "-c" "commit.gpgsign=false"
+                      "commit" "-m" message)
+                :output :string :error-output :string)))
+        (write-file target (format nil "target base~%"))
+        (write-file sibling (format nil "sibling base~%"))
+        (uiop:run-program (list "git" "-C" directory "add" "-A")
+                          :output :string :error-output :string)
+        (commit "glob paths")
+        (write-file target (format nil "target first~%target second~%"))
+        (write-file sibling (format nil "sibling changed~%"))
+        (let ((entries (nerimux/vcs::%git-numstat-entries directory (list target))))
+          (expect (= 1 (length entries)))
+          (expect (and entries
+                       (string= target (vcs-kit:numstat-entry-path (first entries)))))
+          (expect (and entries (= 2 (vcs-kit:numstat-entry-additions (first entries)))))
+          (expect (and entries (= 1 (vcs-kit:numstat-entry-deletions (first entries))))))
+        (nerimux/test/ports:with-temporary-posix-environment-variable
+            ("GIT_LITERAL_PATHSPECS" "1")
+          (expect (string= "1" (sb-ext:posix-getenv "GIT_LITERAL_PATHSPECS")))
+          (let ((entries (nerimux/vcs::%git-numstat-entries directory (list target))))
+            (expect (= 1 (length entries)))
+            (expect (and entries
+                         (string= target (vcs-kit:numstat-entry-path (first entries)))))
+            (expect (and entries (= 2 (vcs-kit:numstat-entry-additions (first entries)))))
+            (expect (and entries (= 1 (vcs-kit:numstat-entry-deletions (first entries))))))))))
+  (it "numstat regression falls back to full diff for an invalid UTF-8 tracked path"
+    (let* ((directory (%run-git-read-test-repo))
+           (captured-arguments nil)
+           (selected-additions nil)
+           (selected-deletions nil)
+           (original-run-git-read
+             (fdefinition (find-symbol "%RUN-GIT-READ" :nerimux/vcs))))
+      (with-open-file (stream (format nil "~Atracked.txt" directory)
+                              :direction :output
+                              :if-exists :supersede)
+        (write-line "original" stream))
+      (labels ((run-fixture-command (label arguments &optional output)
+                 (handler-case
+                     (uiop:run-program arguments
+                                       :directory directory
+                                       :output output
+                                       :error-output nil)
+                   (error (condition)
+                     (error "invalid UTF-8 fixture ~A failed: ~A"
+                            label condition))))
+               (commit ()
+                 (run-fixture-command
+                  "commit raw invalid-byte path"
+                  (list "git" "-C" directory
+                        "-c" "user.name=Fixture"
+                        "-c" "user.email=fixture@example.invalid"
+                        "-c" "commit.gpgsign=false"
+                        "-c" "core.hooksPath=/dev/null"
+                        "commit" "-q" "-m" "invalid path"))))
+        (run-fixture-command
+         "insert raw tracked path into Git index"
+         (list "python3" "-c"
+               "import subprocess,sys; repo=sys.argv[1].encode(); blob=subprocess.run([b'git',b'-C',repo,b'hash-object',b'-w',b'--stdin'],input=b'before\\n',stdout=subprocess.PIPE,check=True).stdout.strip(); data=b'100644 '+blob+b' 0\\t\\xffbad.txt\\0'; subprocess.run([b'git',b'-C',repo,b'update-index',b'-z',b'--index-info'],input=data,check=True)"
+               directory))
+        (commit)
+        (let* ((tracked-path-hex
+                 (run-fixture-command
+                  "Git path byte check"
+                  (list "/bin/sh" "-c"
+                        "git -C \"$1\" ls-files -z | od -An -v -tx1 | tr -d \"[:space:]\""
+                        "sh" directory)
+                  :string))
+               (snapshot
+                 (handler-case
+                     (nerimux/vcs::%git-status-snapshot directory)
+                   (error (condition)
+                     (error "status snapshot call failed: ~A" condition))))
+               (entries (vcs-kit:vcs-status-snapshot-entries snapshot)))
+          (with-stubbed-fdefinition
+              ((nerimux/vcs::%run-git-read
+                (lambda (received-directory subcommand &rest arguments)
+                  (setf captured-arguments (cons subcommand arguments))
+                  (apply original-run-git-read
+                         received-directory subcommand arguments))))
+            (handler-case
+                (multiple-value-setq (selected-additions selected-deletions)
+                  (nerimux/vcs::%worktree-status-diff-line-counts directory entries))
+              (error (condition)
+                (error "selected line-count calculation failed: ~A" condition))))
+          (multiple-value-bind (full-additions full-deletions)
+              (handler-case
+                  (nerimux/vcs::%worktree-status-diff-line-counts directory)
+                (error (condition)
+                  (error "full line-count calculation failed: ~A" condition)))
+            (expect (search "ff6261642e74787400" tracked-path-hex))
+            (expect (some (lambda (entry)
+                            (find #\?
+                                  (vcs-kit:vcs-status-entry-path entry)))
+                          entries))
+            (expect (equal (list "diff" "--numstat" "-z") captured-arguments))
+            (expect (= 0 full-additions))
+            (expect (= 1 full-deletions))
+            (expect (= full-additions selected-additions))
+            (expect (= full-deletions selected-deletions)))))))
+  (it "numstat regression falls back to full diff when pathspec argv exceeds 128 KiB"
+    (let* ((directory (%run-git-read-test-repo))
+           (path-count 535)
+           (path-prefix (make-string 230 :initial-element #\p))
+           (captured-arguments nil)
+           (selected-additions nil)
+           (selected-deletions nil)
+           (original-run-git-read
+             (fdefinition (find-symbol "%RUN-GIT-READ" :nerimux/vcs))))
+      (flet ((path-for (index)
+               (format nil "~A~4,'0D" path-prefix index))
+             (write-file (name content)
+               (with-open-file (stream (format nil "~A~A" directory name)
+                                       :direction :output
+                                       :if-exists :supersede
+                                       :if-does-not-exist :create)
+                 (write-string content stream)))
+             (commit ()
+               (uiop:run-program
+                (list "git" "-C" directory
+                      "-c" "user.name=Fixture"
+                      "-c" "user.email=fixture@example.invalid"
+                      "-c" "commit.gpgsign=false"
+                      "commit" "-m" "many paths")
+                :output :string :error-output :string)))
+        (dotimes (index path-count)
+          (write-file (path-for index) (format nil "before~%")))
+        (uiop:run-program (list "git" "-C" directory "add" "-A")
+                          :output :string :error-output :string)
+        (commit)
+        (dotimes (index path-count)
+          (write-file (path-for index) (format nil "after~%"))))
+      (let* ((snapshot (nerimux/vcs::%git-status-snapshot directory))
+             (entries (vcs-kit:vcs-status-snapshot-entries snapshot)))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs::%run-git-read
+              (lambda (received-directory subcommand &rest arguments)
+                (setf captured-arguments (cons subcommand arguments))
+                (apply original-run-git-read
+                       received-directory subcommand arguments))))
+          (multiple-value-setq (selected-additions selected-deletions)
+            (nerimux/vcs::%worktree-status-diff-line-counts directory entries)))
+        (multiple-value-bind (full-additions full-deletions)
+            (nerimux/vcs::%worktree-status-diff-line-counts directory)
+          (expect (= path-count (length entries)))
+          (expect (equal (list "diff" "--numstat" "-z") captured-arguments))
+          (expect (= path-count full-additions))
+          (expect (= path-count full-deletions))
+          (expect (= full-additions selected-additions))
+          (expect (= full-deletions selected-deletions))))))
+  (it "numstat regression logs numstat failures while returning zero counts"
+    (let ((logged-message nil)
+          (additions nil)
+          (deletions nil))
+      (handler-bind
+          ((warning
+             (lambda (condition)
+               (setf logged-message (format nil "~A" condition))
+               (muffle-warning condition))))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs::%git-numstat-entries
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (error "forced numstat failure"))))
+          (multiple-value-setq (additions deletions)
+            (nerimux/vcs::%worktree-status-diff-line-counts
+             "/fixture"
+             (list (vcs-kit::%make-vcs-status-entry
+                    :kind :ordinary :index-status "." :worktree-status "M"
+                    :path "tracked.txt"))))))
+      (expect logged-message)
+      (expect (and logged-message (search "numstat" (string-downcase logged-message))))
+      (expect (= 0 additions))
+      (expect (= 0 deletions)))))
 

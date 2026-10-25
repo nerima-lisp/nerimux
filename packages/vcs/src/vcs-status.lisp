@@ -3,6 +3,8 @@
 (defvar *git-read-output-limit* (* 1024 1024)
   "Maximum stdout byte count captured by %RUN-GIT-READ. Output over this limit
 signals %GIT-READ-ERROR.")
+(defconstant +numstat-pathspec-argv-byte-limit+ (* 128 1024)
+  "Maximum UTF-8 bytes, including NUL terminators, passed in numstat pathspec arguments.")
 
 (defvar *git-read-timeout-seconds* 30
   "Deadline for one %RUN-GIT-READ call. A process that exceeds it is terminated
@@ -30,30 +32,38 @@ or launch failure."))
 (defun %run-git-read (directory subcommand &rest arguments)
   "Run git through VCS-KIT with a deadline and bounded octet capture."
   (let ((result
-          (handler-case
-              (apply (function vcs-kit:run-vcs)
-                     nil subcommand arguments
-                     (append
-                      (list :executable "git"
-                            :directory directory
-                            :input ""
-                            :timeout *git-read-timeout-seconds*
-                            :output :capture
-                            :error-output :capture
-                            :result-type :octets
-                            :max-output-characters *git-read-output-limit*)
-                      (when *worktree-test-environment-update*
-                        (list :environment-update
-                              *worktree-test-environment-update*))))
-            (vcs-kit:vcs-command-error ()
-              (error '%git-read-error
-                     :directory directory
-                     :subcommand subcommand
-                     :arguments arguments)))))
+         (handler-case
+             (apply (function vcs-kit:run-vcs)
+                    nil subcommand arguments
+                    (append
+                     (list :executable "git"
+                           :directory directory
+                           :input ""
+                           :timeout *git-read-timeout-seconds*
+                           :output :capture
+                           :error-output :capture
+                           :result-type :octets
+                           :max-output-characters *git-read-output-limit*)
+                     (when (or *worktree-test-environment-update*
+                               (string= subcommand "diff"))
+                       (list :environment-update
+                             (append
+                              (remove-if
+                               (lambda (entry)
+                                 (and (string= subcommand "diff")
+                                      (string= (car entry) "GIT_LITERAL_PATHSPECS")))
+                               *worktree-test-environment-update*)
+                              (when (string= subcommand "diff")
+                                (list (cons "GIT_LITERAL_PATHSPECS" nil))))))))
+           (vcs-kit:vcs-command-error ()
+                                      (error '%git-read-error
+                                             :directory directory
+                                             :subcommand subcommand
+                                             :arguments arguments)))))
     (let* ((success-p (process-kit:process-success-p result))
            (output-limit
-             (when (process-kit:process-result-stdout-truncated-p result)
-               *git-read-output-limit*)))
+            (when (process-kit:process-result-stdout-truncated-p result)
+              *git-read-output-limit*)))
       (when (or (not success-p) output-limit)
         (error '%git-read-error
                :directory directory
@@ -85,13 +95,27 @@ handle."
     snapshot))
 
 (defun %git-numstat-entries (directory &optional paths)
-  "Return DIRECTORY git diff numstat entries, restricted to literal PATHS when supplied."
+  "Return numstat entries for PATHS, falling back to full diff for unsafe or oversized pathspecs."
   (vcs-kit:parse-numstat
    (if paths
-       (apply (function %run-git-read) directory "diff" "--numstat" "-z" "--"
-              (mapcar
-               (lambda (path) (concatenate (quote string) ":(literal)" path))
-               paths))
+       (let* ((pathspecs
+                (mapcar
+                 (lambda (path)
+                   (concatenate (quote string) ":(top,literal)" path))
+                 paths))
+              (pathspec-argv-bytes
+                (loop for pathspec in pathspecs
+                      sum
+                      (1+
+                       (length
+                        (sb-ext:string-to-octets
+                         pathspec
+                         :external-format :utf-8))))))
+         (if (or (some (lambda (path) (find #\? path)) paths)
+                 (> pathspec-argv-bytes +numstat-pathspec-argv-byte-limit+))
+             (%run-git-read directory "diff" "--numstat" "-z")
+             (apply (function %run-git-read) directory "diff" "--numstat" "-z" "--"
+                    pathspecs)))
        (%run-git-read directory "diff" "--numstat" "-z"))))
 
 (defun %changed-file-code (entry)
@@ -148,6 +172,15 @@ alignment, Unit MODEL). Treating the dot as set put every unstaged change
 in the staged section as well, and left \"Unstaged changes\" populated
 after `git add -A`."
   (not (or (string= status ".") (string= status " ") (string= status "?"))))
+(defun %numstat-eligible-entry-p (entry)
+  "Whether ENTRY contributes to worktree numstat."
+  (case (vcs-kit:vcs-status-entry-kind entry)
+    ((:untracked :ignored) nil)
+    (:unmerged t)
+    ((:ordinary :rename-or-copy)
+     (%changed-file-column-set-p
+      (vcs-kit:vcs-status-entry-worktree-status entry)))
+    (otherwise t)))
 
 (defun %worktree-status-untracked-files (entries)
   "ENTRIES of KIND :UNTRACKED as (\"??\" . PATH) conses (magit alignment,
@@ -204,34 +237,30 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
   "Return additions and deletions for eligible paths in DIRECTORY."
   (handler-case
       (let* ((paths
-              (when entries-supplied-p
-                (loop for entry in entries
-                      for kind = (vcs-kit:vcs-status-entry-kind entry)
-                      when (case kind
-                             ((:untracked :ignored) nil)
-                             (:unmerged t)
-                             ((:ordinary :rename-or-copy)
-                              (%changed-file-column-set-p
-                               (vcs-kit:vcs-status-entry-worktree-status entry)))
-                             (otherwise t))
-                      append
-                      (cons (vcs-kit:vcs-status-entry-path entry)
-                            (when (eq kind :rename-or-copy)
-                              (let ((original
-                                     (vcs-kit:vcs-status-entry-original-path entry)))
-                                (and original (list original))))))))
+               (when entries-supplied-p
+                 (loop for entry in entries
+                       for kind = (vcs-kit:vcs-status-entry-kind entry)
+                       when (%numstat-eligible-entry-p entry)
+                       append
+                       (cons (vcs-kit:vcs-status-entry-path entry)
+                             (when (eq kind :rename-or-copy)
+                               (let ((original
+                                       (vcs-kit:vcs-status-entry-original-path entry)))
+                                 (and original (list original))))))))
              (numstat-entries
-              (if entries-supplied-p
-                  (and paths (%git-numstat-entries directory paths))
-                (%git-numstat-entries directory))))
+               (if entries-supplied-p
+                   (and paths (%git-numstat-entries directory paths))
+                   (%git-numstat-entries directory))))
         (if (and entries-supplied-p (null paths))
             (values 0 0)
-          (let ((additions 0)
-                (deletions 0))
-            (dolist (entry numstat-entries (values additions deletions))
-              (incf additions (or (vcs-kit:numstat-entry-additions entry) 0))
-              (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0))))))
-    (error (condition) (declare (ignore condition)) (values 0 0))))
+            (let ((additions 0)
+                  (deletions 0))
+              (dolist (entry numstat-entries (values additions deletions))
+                (incf additions (or (vcs-kit:numstat-entry-additions entry) 0))
+                (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0))))))
+    (error (condition)
+      (warn "Git numstat failed in ~A: ~A" directory condition)
+      (values 0 0))))
 
 (declaim (ftype function %read-stashes-at))
 
@@ -256,16 +285,7 @@ once reads it exactly once and passes the same reading down (see
                (stash-reading
                  (if stashes-supplied-p stashes (%read-stashes-at directory))))
           (multiple-value-bind (additions deletions)
-              (if (some
-                   (lambda (entry)
-                     (case (vcs-kit:vcs-status-entry-kind entry)
-                       ((:untracked :ignored) nil)
-                       (:unmerged t)
-                       ((:ordinary :rename-or-copy)
-                        (%changed-file-column-set-p
-                         (vcs-kit:vcs-status-entry-worktree-status entry)))
-                       (otherwise t)))
-                   entries)
+              (if (some (function %numstat-eligible-entry-p) entries)
                   (%worktree-status-diff-line-counts directory entries)
                   (values 0 0))
             (%make-worktree-status-update
