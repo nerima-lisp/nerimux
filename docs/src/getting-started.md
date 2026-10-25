@@ -2,19 +2,27 @@
 
 ## Install and run
 
-Nix is the only supported build path: it pins SBCL and every Lisp dependency,
-so a build either reproduces exactly or fails loudly.
+Nix with flakes enabled is the only supported build path. It pins SBCL and every
+Lisp dependency.
 
 ```bash
 nix run github:nerima-lisp/nerimux -- attach
 ```
 
-From a checkout:
+From the repository root of a checkout:
 
 ```bash
 nix build .                           # → ./result/bin/nerimux
 ./result/bin/nerimux attach
 ```
+
+## Check your setup
+
+Run `nerimux doctor` to inspect the runtime environment and available tools. From
+a checkout, use `./result/bin/nerimux doctor`. Nerimux needs Git and ghq on
+`PATH` for repository discovery, cloning, and worktree operations. The report
+shows if either is missing; a missing ghq does not alone make the command exit
+with a failure status.
 
 ## Usage
 
@@ -24,6 +32,7 @@ nerimux attach                         # open the repolist view
 nerimux attach github.com/org/repo     # focus a repository by its ghq spec
 nerimux attach /path/to/worktree       # open a local worktree
 nerimux kill                           # stop the server (--force closes panes)
+nerimux doctor                         # inspect runtime requirements
 ```
 
 These examples assume `nerimux` is on `PATH`. From a checkout, use
@@ -32,7 +41,7 @@ These examples assume `nerimux` is on `PATH`. From a checkout, use
 
 `attach` auto-starts the headless runtime and connects a thin client. Running
 `nerimux` with no command at all defaults to `attach`; `attach`, `server`,
-and `kill` are the only commands, and only an unrecognized command word
+`kill`, and `doctor` are the available commands. An unrecognized command word
 prints the usage summary and exits non-zero. `-V`/`-h` are the only global
 flags. A selector containing a slash is resolved either against the ghq catalog
 using the full specification, `host/organization/repository`, or against a
@@ -43,8 +52,7 @@ If the current directory is inside a worktree ghq already tracks (a
 subdirectory counts too), `attach` skips the repolist and opens
 straight into that worktree's pane: the one last focused there, or a new
 shell if none was open yet. This resolves against the running server's
-catalog even before the initial scan has finished, by resolving and merging
-just that directory's repository synchronously. The pane takes typing
+catalog even before the initial scan has finished. The pane takes typing
 directly. There is no mode to leave first; every nerimux key inside a pane
 starts with `C-q` (see [Default key bindings](#default-key-bindings) below).
 An explicit selector (`attach github.com/org/repo`, `attach
@@ -70,12 +78,10 @@ not look like a hung shell.
 If `attach` has to auto-start the server and something goes wrong, the
 spawned server's stdout/stderr are captured to a per-session-name log file
 rather than discarded, so a crash leaves a forensic trail. The path is
-`nerimux/<name>.log` under a state-home directory resolved as `$XDG_STATE_HOME`
-(falling back to `~/.local/state`), or under `$NERIMUX_RUNTIME_STATE` when
-that's set. Both paths use the same state-home resolution, so the two files
-always land in the same directory but never collide.
-The log directory is created `0700`. See `%runtime-log-path` and
-`%runtime-state-home` in `src/runtime-lifecycle.lisp`.
+`nerimux/<name>.log` under `$XDG_STATE_HOME` (falling back to `~/.local/state`),
+or under `$NERIMUX_RUNTIME_STATE` when that's set. The runtime state file uses
+the same directory and a `.state` extension, so the files do not collide. The
+log directory is created `0700`.
 
 ## Default key bindings
 
@@ -91,11 +97,8 @@ typing into a pane. Every nerimux-level key inside a pane starts with
 **`C-q`** instead. The initial view is `repolist`, unless the cwd-match above
 jumps straight into a worktree's pane; `C-p` opens the global picker across
 organizations, repositories, worktrees, and panes from either `repolist` or
-`status`.
-
-(`CLIENT-CONN-VIEW` and `CLIENT-CONN-MODAL`, `src/server-multi-data.lisp`,
-are the two slots this model is built from; `%client-ui-keys-p`, in
-`src/server-multi-dispatch.lisp`, is the one-line derivation described above.)
+`status`. From a pane, press `C-q C-p` to open the picker; `Esc` returns to the
+pane where it was opened.
 
 ### Keys shared by `repolist` and `status`
 
@@ -119,9 +122,11 @@ are the two slots this model is built from; `%client-ui-keys-p`, in
 | `P` `F` `b` `m` `r` `z` `l` `d` `f` `X` `w` | Open the matching transient directly |
 | `Esc` | Close the modal on top. With nothing open, `Esc` is discarded and the key struck after it is read normally |
 
-`c`, `t`, and `!` open the Commit, Tag, and Shell-command transients from
-`status` only. From `repolist` those three letters mean something else (next
-table), and their transients are reached through `?`.
+`c` and `t` open the Commit and Tag transients from `status` only. From
+`repolist` those letters mean something else (next table), and their transients
+are reached through `?`. In `status`, `!` displays the notice `arbitrary shell
+execution is deliberately not wired -- it is its own trust-boundary decision`;
+it does not open a transient and is not in the `?` menu.
 
 ### `repolist` only
 
@@ -145,7 +150,7 @@ table), and their transients are reached through `?`.
 | `k` | Discard the selected change, after a confirmation. A staged file is restored in both the index and the worktree, an unstaged file in the worktree only, and an untracked file is deleted |
 | `c` | Open the Commit transient |
 | `t` | Open the Tag transient |
-| `!` | Open the Shell-command transient |
+| `!` | Display the shell-execution notice |
 | `v` | Step back, the same as `q` |
 
 Selecting a row that is not a file (a section header, a commit, or a stash) and
@@ -196,13 +201,8 @@ or closes it when nothing opened it, and `Esc` closes it outright. The full set
 | `f` | Fetch | `f` fetch this repository; `F` fetch the whole organization |
 | `t` | Tag | `l` list tags; `t` create a tag |
 | `X` | Reset | `s` `reset --soft HEAD`; `h` `reset --hard HEAD` (confirms first); `c` clean untracked files `-fd` (confirms first) |
-| `!` | Shell command | `!` is a stub: it reports that arbitrary shell execution is deliberately not wired, being its own trust-boundary decision |
 | `w` | Worktree | the submenu below |
 | `?` | Dispatch | opens any of the above; `k` opens the full-screen help view |
-
-`!` is the only deliberate stub left in this table. Every other action runs
-what it names. The one other entry that reports instead of acting is `w b`,
-which points at the command line rather than at a branch chooser.
 
 #### The `w` submenu
 
@@ -217,7 +217,13 @@ which points at the command line rather than at a branch chooser.
 | `C` | Toggle the selected workspace complete |
 | `p` | Prune the selected workspace, after a confirmation |
 | `P` | Prune every eligible workspace, after a confirmation |
-| `b` | Reports `use : wt-create --branch <name> --confirm` |
+| `b` | Browse branches to create or reuse a worktree |
+
+`w b` lists local and remote-tracking branches for the selected repository. A
+remote-tracking selection creates a local tracking branch. If a selected branch
+already has a worktree, nerimux reuses that directory and opens a new pane
+there. Enter a branch name that is not listed to see a create-worktree
+confirmation.
 
 `k`, `l`, and `u` do not act directly: each pre-fills the command line with
 `wt-delete --confirm`, `wt-lock`, or `wt-unlock`, and `Enter` runs it while
@@ -248,7 +254,7 @@ submits. Branch names, tag names, and remote names use a one-line prompt where
 `Enter` submits and `Esc` cancels. A name that starts with `-` is rejected
 with `a name cannot start with -`.
 
-### The `:` command line (FR-207)
+### The `:` command line
 
 The workspace command line accepts exactly these command names. Tree navigation,
 picker control, and modal transitions are protocol commands and are not
@@ -264,9 +270,7 @@ the : prompt: <name>`, with the command word you typed after the colon.
 | `wt-prune` | Preview prunable worktrees without removing anything or opening a panel, using the same eligibility rule `w P` follows |
 | `wt-prune-confirm` | Prune those worktrees for real. Requires `--confirm` |
 | `wt-complete` | Toggle the selected worktree complete. Takes no arguments |
-| `workspace-complete` | The same as `wt-complete` |
-| `workspace-prune` | Prune the selected workspace, after a confirmation. Takes no arguments |
-| `workspace-prune-all` | Prune every completed workspace, after a confirmation. Takes no arguments |
+| `clone <source>` | Clone a repository and create its initial worktree. Requires ghq |
 | `overview` | Open the repolist view |
 | `detail` | Open the selected worktree's pane view |
 | `refresh` | Refresh the workspace catalog and VCS state, dropping any settled failure badge first |
@@ -277,6 +281,19 @@ nothing, for example `wt-create: add --confirm to run`. Every worktree command
 acts on the selected worktree unless `-t <spec>` (or `--target <spec>`) names
 another one. A `-t` spec that resolves to nothing reports `target not found`
 and the command does not fall back to the selected worktree.
+
+The retired names `workspace-complete`, `workspace-prune`, and
+`workspace-prune-all` display deprecation notices that direct users to
+`wt-complete`, `w p`, and `w P`, respectively.
+
+`: clone <source>` accepts HTTPS URLs in the form
+`https://host/owner/repo[.git]`, SSH URLs in the form
+`ssh://[user@]host/owner/repo[.git]` or `git@host:owner/repo[.git]`, and ghq
+specifications in the form `owner/repo[.git]` or `host/owner/repo[.git]`. It
+rejects empty or malformed sources, leading `-`, whitespace or control
+characters, unsupported formats, and HTTPS credentials. The command creates a
+bare repository and an initial detached worktree from its default branch. It
+selects the new worktree in the repolist but does not open a pane.
 
 These prompt inputs are not workspace commands and do not appear in the table
 above:
@@ -305,6 +322,8 @@ candidate.
 | `C-q x` | Close the focused pane. While its process is still running, the first press only reports `C-q x again to close` and a second `C-q x` closes it; any other key in between cancels. A pane whose process has already exited closes on the first press |
 | `C-q z` | Toggle zoom on the focused pane's window |
 | `C-q h` / `j` / `k` / `l` | Move focus to the neighbouring pane |
+| `C-q ;` | Return to the previously focused pane |
+| `C-q L` | Return to the previously focused window |
 | `C-q n` / `p` | Cycle through the current worktree's windows |
 | `C-q t` | Open a shell pane in the selected worktree |
 | `C-q K` | Stop the agent running in the selected worktree |
@@ -314,6 +333,8 @@ candidate.
 | `C-q d` | Detach while keeping the runtime session resident |
 | `C-q Q` | Quit the server (asks for confirmation, showing how many panes are still open) |
 | `C-q C-q` | Escape: drop any modal and hand the keyboard back to the current view |
+| `C-q q` | Send the configured prefix byte to the focused pane (default: `C-q`) |
+| `C-q C-p` | Open the global picker from a pane |
 
 A key with no binding in this table is discarded: the prefix already consumed
 it, and nothing else happens.
@@ -322,16 +343,13 @@ it, and nothing else happens.
 Fetch is the `f` transient now, reachable from `status` directly or from
 `repolist` via `?` f.
 
-Splits start at 50/50 and can be resized with the bindings above (FR-105). A window has
+Splits start at 50/50 and can be resized with the bindings above. A window has
 no four-pane limit: splitting continues in the same window while every
 resulting pane meets the model's minimum size. When a split would make a pane
 too small, nerimux reports the refusal and leaves the window and pane lists
 unchanged.
 
 ### Scrollback (`C-q [`)
-
-This is the only place vi-style motion survives; it replaces what used to be
-called copy mode.
 
 | Key | Action |
 |---|---|
@@ -343,25 +361,6 @@ called copy mode.
 | `Space` | Begin a selection at the cursor |
 | `y` | Yank the selection and leave scrollback |
 | `q` | Leave scrollback without yanking |
-
-### Retired: do not reintroduce
-
-The overview/detail keymap this replaced bound `j` `k` `J` `K` `h` `l` `i`
-`o` `d` (view switch) `r` (refresh) `X` (worktree delete) `L` `U` `n`
-(worktree create) and `c` (copy mode), plus the `:normal`/`:input`/`:copy`
-mode vocabulary itself. None of that survives: `j`/`k` are now `n`/`p`,
-`o`/`d` no longer switch views (`C-q w` returns to `repolist` and `q` steps
-back), worktree create/delete/lock/unlock moved under the `w` transient,
-refresh is `g`, and copy mode is scrollback (`C-q [`).
-
-The later repolist bindings `n` (create a worktree), `p` (prune), `C` (toggle
-complete), and `P` (prune all) are retired too. `n` and `p` now move the
-selection in both views, `P` opens the Push transient, and the four actions
-live at `w n`, `w p`, `w C`, and `w P`.
-
-Two working key bindings (`C-q F`, `C-q C-f`) were also retired outright,
-folded into the `f` transient. `1`–`4`, `Tab`, `S-Tab`, and the transient menus
-are new; they have no old-keymap equivalent to confuse them with.
 
 ### The repolist tree
 
@@ -426,7 +425,7 @@ place the worktree under Attention; the first three mark it in place. A
 repository or organization row carries `!` when anything beneath it does.
 
 Process exit or a BEL or recognized terminal notification marks an agent
-`WAITING`; focusing its pane clears that state (FR-201). Unread output on an
+`WAITING`; focusing its pane clears that state. Unread output on an
 unfocused pane marks that pane, and leaves its worktree under Active rather
 than moving it to Attention.
 
@@ -436,7 +435,7 @@ its process is gone. A changed-file row names its state as a word, `modified`,
 or `conflict`, followed by the path, rather than git's porcelain `XY` codes.
 
 When no attached client is focusing a waiting agent, attached clients receive
-a host-terminal notification (FR-202).
+a host-terminal notification.
 
 `Tab` on a worktree row inline-expands it one level deeper, in a fixed
 order: its panes, its changed files, and its recent commits, skipping any
@@ -503,16 +502,8 @@ With a repository selected, `w n` fetches its default branch, creates a
 detached worktree, selects it, and opens the Assign transient over it. `w c`
 creates the same worktree and opens a shell in it directly, skipping the
 transient, which is what its menu entry `create worktree and open its shell`
-says. To pick the branch name yourself, use `w b`, which tells you the command
-to type, or type it directly:
-
-```
-: wt-create --branch <name> --confirm
-```
-
-The command line takes the `w c` path: the worktree is created and a shell
-opens in it. Press `a` afterwards to reach the Assign transient, or use `w n`
-when you want the menu first.
+says. To choose a branch or enter a new branch name, use the `w b` branch
+browser described above.
 
 To assign an existing worktree, select it and press `a` (or `w a`). `Enter` on
 a worktree row returns to the pane last focused there if it is still live,
@@ -537,10 +528,11 @@ going through the menu.
 
 ### The global picker
 
-`C-p` opens the global picker over whichever view you were in, and `Esc`
-returns you to that same view. It searches organizations, repositories,
-worktrees, and panes, and every printable key is a character of the query, so
-the selection moves with `C-n` and `C-p` rather than `n` and `p`.
+`C-p` opens the global picker from `repolist` or `status`; from a pane, use
+`C-q C-p`. The picker searches organizations, repositories, worktrees, and
+panes, and every printable key is a character of the query, so the selection
+moves with `C-n` and `C-p` rather than `n` and `p`. `Esc` closes it and returns
+to the view or pane where it was opened.
 
 | Key | Action |
 |---|---|
@@ -548,7 +540,7 @@ the selection moves with `C-n` and `C-p` rather than `n` and `p`.
 | `Enter` | Open the selected row |
 | `C-r` | Toggle regex matching |
 | `Backspace` | Delete the last query character |
-| `Esc` | Close the picker |
+| `Esc` | Close the picker and return to the view or pane where it was opened |
 
 The panel is titled `Pick a worktree, repository or pane`, and its status line
 carries the result count followed by `C-n/C-p move  Enter open  C-r regex
@@ -568,42 +560,39 @@ is a compiled-in constant.
 
 Pasted input is recognized as one bracketed-paste operation. In a pane, the
 paste delimiters are preserved only when that pane has requested bracketed
-paste; otherwise they are removed before the text reaches the shell (FR-101).
+paste; otherwise they are removed before the text reaches the shell.
 In the command line, tree filter, and picker, pasted line breaks are removed
 and the remaining text is inserted into the current field.
 
 Panes that enable terminal focus reporting receive focus-out/focus-in reports
 when pane focus changes, and the host terminal's focus changes are relayed to
-the focused pane (FR-102).
+the focused pane.
 
 On attach, the client uses the alternate screen and enables bracketed paste and
 focus reporting. Detach, quit, connection loss, and server EOF restore those
-terminal modes (FR-103).
+terminal modes.
 
 Each nerimux-rendered frame is wrapped in synchronized output, `ESC[?2026h`
 through `ESC[?2026l`, so the host terminal applies the frame atomically. Pane
-PTY bytes and forwarded notifications remain transparent to this framing
-(FR-106).
+PTY bytes and forwarded notifications remain transparent to this framing.
 
 When the focused pane enables DECCKM (`ESC[?1h`), legacy host arrow sequences
 `ESC[A` through `ESC[D` are delivered to that pane as `ESC O A` through
 `ESC O D`. They remain unchanged when DECCKM is disabled, and modal workspace
-input is never sent to a pane (FR-107).
+input is never sent to a pane.
 
 BEL and OSC 9, 99, and 777 notification sequences from panes are forwarded to
 attached host terminals even when the pane is not focused. Each pane's
 notifications are coalesced to at most one per second; unknown OSC commands
-are ignored (FR-104).
+are ignored.
 
 A newly attached client passes its allow-listed terminal identity, including
 `TERM_PROGRAM`, `TERM_PROGRAM_VERSION`, and `KITTY_*`, to panes created
-afterwards. `TERM` remains `screen-256color`; existing panes are unchanged
-(FR-108).
+afterwards. `TERM` remains `screen-256color`; existing panes are unchanged.
 
 The runtime saves worktrees, windows, split layouts, completion state, and
 expanded repository rows, then restores them after a server restart. Restored
-panes start fresh shells in their worktree, and missing worktrees are skipped
-(FR-206).
+panes start fresh shells in their worktree, and missing worktrees are skipped.
 
 ## Development
 
@@ -651,7 +640,7 @@ hide executable behavior.
 | `docs` | this site, built with `mkdocs --strict` |
 
 The main suite runs on [cl-weave](https://github.com/nerima-lisp/cl-weave) and covers the VT100
-emulator, layout geometry, copy mode, and the client/server protocol. The
+emulator, layout geometry, scrollback, and the client/server protocol. The
 runner is deliberately sequential because tests share global session/socket state.
 
 Live PTY integration against a real shell is a separate system,
