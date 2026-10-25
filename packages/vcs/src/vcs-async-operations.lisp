@@ -352,7 +352,7 @@
                                     (setf dispatch-state :running
                                           run-p t)))
                                 (when run-p
-                                  (apply callback arguments))))
+                                  (apply callback arguments)))))
                          (error (caught)
                            (let ((fallback-p nil))
                              (cl-concurrent-kit:with-lock-held (queue-lock)
@@ -361,7 +361,7 @@
                                        fallback-p t)))
                              (if fallback-p
                                  (fail-one repository entry caught)
-                                 (error caught))))))))
+                                 (error caught)))))))
                    (mark-request-ready (request stashes condition)
                      (let ((settle-p nil))
                        (cl-concurrent-kit:with-lock-held (queue-lock)
