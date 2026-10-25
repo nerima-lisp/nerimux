@@ -23,6 +23,6 @@
            (return nil))
          (sleep 0.01))))
    worker-description)
-  (sb-thread:join-thread thread :timeout 0)
+  (sb-thread:join-thread thread)
   (expect (not (sb-thread:thread-alive-p thread)))
   thread)
