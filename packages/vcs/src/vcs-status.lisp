@@ -285,7 +285,12 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
                 (incf additions (or (vcs-kit:numstat-entry-additions entry) 0))
                 (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0))))))
     (error (condition)
-      (warn "Git numstat failed in ~A: ~A" directory condition)
+      (log-kit:emit-log
+       *vcs-diagnostic-logger*
+       log-kit:+level-warn+
+       (format nil "Git numstat failed in ~A" directory)
+       (list :directory directory
+             :condition (princ-to-string condition)))
       (values 0 0))))
 
 (declaim (ftype function %read-stashes-at))

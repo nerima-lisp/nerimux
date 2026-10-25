@@ -171,7 +171,7 @@
 
 (defparameter *workspace-worktree-status-worker-limit*
   64
-  "Maximum concurrent worktree status readers per refresh. The semaphore uses this value when first initialized; SETF later changes per-refresh thread count only, not the process-wide cap. Changing the cap requires a process restart.")
+  "Per-refresh thread count. The process-wide semaphore is initialized with this capacity once; changing this value later affects per-refresh pool sizes only. Restart to change the process-wide cap.")
 (defvar *workspace-worktree-status-reader-semaphore*
   (sb-thread:make-semaphore :count *workspace-worktree-status-worker-limit*))
 (defconstant +repository-worktree-status-worker-limit+
@@ -343,116 +343,122 @@
                            (fail-one repository entry condition)
                            (complete-one repository entry))))
                    (settle-request (request)
-                     (let ((worker-settlement-p nil))
-                       (cl-concurrent-kit:with-lock-held (queue-lock)
-                         (unless (%workspace-status-request-workers-settled-p request)
-                           (setf (%workspace-status-request-workers-settled-p request) t
-                                 worker-settlement-p t)
-                           (decf pending-worker-requests)))
-                       (when worker-settlement-p
-                         (maybe-stop-status-workers))
-                       (let* ((repository
-                                (%workspace-status-request-repository request))
-                              (entry (%workspace-status-request-entry request))
-                              (condition (request-condition request))
-                              (dispatch-state :pending)
-                              (callback (if condition #'fail-one #'apply-one))
-                              (arguments
-                                (if condition
-                                    (list repository entry condition)
-                                    (list repository
-                                          entry
-                                          (%workspace-status-request-token request)
-                                          (coerce
-                                           (%workspace-status-request-updates request)
-                                           'list)))))
-                         (handler-case
-                             (%dispatch-callback
-                              callback-dispatch
-                              (lambda ()
-                                (let ((run-p nil))
+                      (let ((worker-settlement-p nil))
+                        (cl-concurrent-kit:with-lock-held (queue-lock)
+                          (unless (%workspace-status-request-workers-settled-p request)
+                            (setf (%workspace-status-request-workers-settled-p request) t
+                                  worker-settlement-p t)
+                            (decf pending-worker-requests)))
+                        (when worker-settlement-p
+                          (maybe-stop-status-workers)
+                          (let* ((repository
+                                   (%workspace-status-request-repository request))
+                                 (entry (%workspace-status-request-entry request))
+                                 (condition (request-condition request))
+                                 (dispatch-state :pending)
+                                 (callback (if condition #'fail-one #'apply-one))
+                                 (arguments
+                                   (if condition
+                                       (list repository entry condition)
+                                       (list repository
+                                             entry
+                                             (%workspace-status-request-token request)
+                                             (coerce
+                                              (%workspace-status-request-updates request)
+                                              'list)))))
+                            (handler-case
+                                (%dispatch-callback
+                                 callback-dispatch
+                                 (lambda ()
+                                   (let ((run-p nil))
+                                     (cl-concurrent-kit:with-lock-held (queue-lock)
+                                       (when (eq dispatch-state :pending)
+                                         (setf dispatch-state :running
+                                               run-p t)))
+                                     (when run-p
+                                       (apply callback arguments)))))
+                              (error (caught)
+                                (let ((fallback-p nil))
                                   (cl-concurrent-kit:with-lock-held (queue-lock)
                                     (when (eq dispatch-state :pending)
-                                      (setf dispatch-state :running
-                                            run-p t)))
-                                  (when run-p
-                                    (apply callback arguments)))))
-                           (error (caught)
-                             (let ((fallback-p nil))
-                               (cl-concurrent-kit:with-lock-held (queue-lock)
-                                 (when (eq dispatch-state :pending)
-                                   (setf dispatch-state :fallback
-                                         fallback-p t)))
-                               (if fallback-p
-                                   (fail-one repository entry caught)
-                                   (error caught))))))))
+                                      (setf dispatch-state :fallback
+                                            fallback-p t)))
+                                  (if fallback-p
+                                      (fail-one repository entry caught)
+                                      (error caught))))))))
+                    )
                    (mark-request-ready (request stashes condition)
-                     (let ((settle-p nil))
-                       (cl-concurrent-kit:with-lock-held (queue-lock)
-                         (setf (%workspace-status-request-stashes request) stashes
-                               (%workspace-status-request-prepared-p request) t)
-                         (when condition
-                           (setf (%workspace-status-request-failed-p request) t
-                                 (%workspace-status-request-preparation-condition request)
-                                 condition))
-                         (unless condition
-                           (queue-ready-request-under-lock request))
-                         (when (request-ready-to-settle-p request)
-                           (setf (%workspace-status-request-settled-p request) t
-                                 settle-p t)))
-                       (maybe-stop-status-workers)
-                       (when settle-p
-                         (settle-request request))))
+                      (let ((settle-p nil))
+                        (cl-concurrent-kit:with-lock-held (queue-lock)
+                          (setf (%workspace-status-request-stashes request) stashes
+                                (%workspace-status-request-prepared-p request) t)
+                          (when condition
+                            (setf (%workspace-status-request-failed-p request) t
+                                  (%workspace-status-request-preparation-condition request) condition))
+                          (unless condition
+                            (queue-ready-request-under-lock request))
+                          (when (request-ready-to-settle-p request)
+                            (setf (%workspace-status-request-settled-p request) t
+                                  settle-p t)))
+                        (when settle-p
+                          (settle-request request))))
+                   (fail-preparation-request (request condition)
+                      (let ((settle-p nil))
+                        (cl-concurrent-kit:with-lock-held (queue-lock)
+                          (unless (%workspace-status-request-workers-settled-p request)
+                            (setf (%workspace-status-request-stashes request) nil
+                                  (%workspace-status-request-prepared-p request) t
+                                  (%workspace-status-request-failed-p request) t
+                                  (%workspace-status-request-preparation-condition request) condition
+                                  (%workspace-status-request-settled-p request) nil)
+                            (when (request-ready-to-settle-p request)
+                              (setf (%workspace-status-request-settled-p request) t
+                                    settle-p t))))
+                        (when settle-p
+                          (settle-request request))))
                    (next-preparation-request ()
                      (cl-concurrent-kit:with-lock-held (queue-lock)
                        (pop preparation-queue)))
                    (prepare-repositories ()
-                     (loop for request = (next-preparation-request)
-                           while request
-                           do (handler-case
-                                  (handler-case
-                                      (let ((stashes nil)
-                                            (condition nil))
-                                        (handler-case
-                                            (progn
-                                              (%dispatch-callback
-                                               callback-dispatch
-                                               on-start
-                                               (%workspace-status-request-repository
-                                                request))
-                                              (setf stashes
-                                                    (%repository-status-shared-stashes
-                                                     (%workspace-status-request-repository
-                                                      request))))
-                                          (error (caught)
-                                            (setf condition caught)))
-                                        (mark-request-ready request stashes condition))
-                                    (error (caught)
-                                      (warn "Workspace status preparation failed for ~A: ~A"
-                                            (%workspace-status-request-repository request)
-                                            caught)
-                                      (let ((settle-p nil))
-                                        (cl-concurrent-kit:with-lock-held (queue-lock)
-                                          (unless
-                                              (%workspace-status-request-settled-p request)
-                                            (setf
-                                             (%workspace-status-request-stashes request) nil
-                                             (%workspace-status-request-prepared-p request) t
-                                             (%workspace-status-request-failed-p request) t
-                                             (%workspace-status-request-preparation-condition
-                                              request)
-                                             caught)
-                                            (when (request-ready-to-settle-p request)
-                                              (setf
-                                               (%workspace-status-request-settled-p request) t
-                                               settle-p t))))
-                                        (maybe-stop-status-workers)
-                                        (when settle-p
-                                          (settle-request request))))
-                                (error (settlement-error)
-                                  (warn "Workspace status settlement failed for ~A: ~A"
-                                        (%workspace-status-request-repository request)
-                                        settlement-error))))))
+                      (loop for request = (next-preparation-request)
+                            while request
+                            do (handler-case
+                                   (handler-case
+                                       (let ((stashes nil)
+                                             (condition nil))
+                                         (handler-case
+                                             (progn
+                                               (%dispatch-callback
+                                                callback-dispatch
+                                                on-start
+                                                (%workspace-status-request-repository request))
+                                               (setf stashes
+                                                     (%repository-status-shared-stashes
+                                                      (%workspace-status-request-repository request))))
+                                           (error (caught)
+                                             (setf condition caught)))
+                                         (mark-request-ready request stashes condition))
+                                     (error (caught)
+                                       (unwind-protect
+                                            (log-kit:emit-log
+                                             *vcs-diagnostic-logger* log-kit:+level-warn+
+                                             (format nil "Workspace status preparation failed for ~A"
+                                                     (%workspace-status-request-repository request))
+                                             (list :repository
+                                                   (%workspace-status-request-repository request)
+                                                   :condition (princ-to-string caught)))
+                                         (fail-preparation-request request caught)))
+                                 (error (settlement-error)
+                                   (unwind-protect
+                                        (log-kit:emit-log
+                                         *vcs-diagnostic-logger* log-kit:+level-warn+
+                                         (format nil "Workspace status settlement failed for ~A"
+                                                 (%workspace-status-request-repository request))
+                                         (list :repository
+                                               (%workspace-status-request-repository request)
+                                               :condition (princ-to-string settlement-error)))
+                                     (fail-preparation-request request settlement-error))))))
+                    )
                    (next-worktree-request ()
                      (sb-thread:wait-on-semaphore status-available)
                      (let ((work nil)
