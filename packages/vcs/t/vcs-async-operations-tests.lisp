@@ -1028,11 +1028,10 @@
                              (aref peak-by-repository index)
                              (max (aref peak-by-repository index)
                                   (aref active-by-repository index)))
-                       (if (and stashes-supplied-p
-                                (eq stashes
-                                    (if (eq repository (first repositories))
-                                        nil
-                                        shared-stashes)))
+                       (if (if (eq repository (first repositories))
+                               (not stashes-supplied-p)
+                               (and stashes-supplied-p
+                                    (eq stashes shared-stashes)))
                            (incf stash-uses)
                            (decf stash-uses)))
                      (when (= in-flight 64)
@@ -1563,6 +1562,281 @@
         (expect (= 1 completion-count))
         (expect (= 1 (length callback-errors)))
         (expect (typep (first callback-errors) 'error)))))
+    (it "caps status readers across overlapping workspace refreshes"
+      (labels ((make-organization (name suffix)
+                 (let ((repositories
+                         (loop for repository-index below 17
+                               collect
+                                 (let ((repository
+                                         (nerimux/workspace-model:make-repository
+                                          :specification
+                                          (format nil "workspace-owner/status-overlap-~A-~D"
+                                                  suffix repository-index)
+                                          :local-path
+                                          (format nil "/tmp/status-overlap-~A-~D"
+                                                  suffix repository-index))))
+                                   (dotimes (worktree-index 4)
+                                     (nerimux/workspace-model:repository-add-worktree
+                                      repository
+                                      (nerimux/workspace-model:make-worktree
+                                       :repository repository
+                                       :path
+                                       (format nil "/tmp/status-overlap-~A-~D/worktree-~D"
+                                               suffix repository-index worktree-index))))
+                                   repository))))
+                   (nerimux/workspace-model:make-organization
+                    :host "workspace-owner" :name name :repositories repositories))))
+        (let* ((first-organization (make-organization "status-overlap-first" "first"))
+               (second-organization (make-organization "status-overlap-second" "second"))
+               (first-repositories
+                 (nerimux/workspace-model:organization-repositories
+                  first-organization))
+               (release-first (sb-thread:make-semaphore :count 0))
+               (release-second (sb-thread:make-semaphore :count 0))
+               (first-saturated (sb-thread:make-semaphore :count 0))
+               (second-prepared (sb-thread:make-semaphore :count 0))
+               (second-reader-started (sb-thread:make-semaphore :count 0))
+               (probe-lock
+                 (cl-concurrent-kit:make-lock :name "overlapping status refresh probe"))
+               (active 0) (peak 0) (first-reads 0) (second-reads 0)
+               (first-threads nil) (second-threads nil))
+          (with-stubbed-fdefinition
+              ((nerimux/vcs::%repository-status-shared-stashes
+                 (lambda (repository)
+                   (declare (ignore repository))
+                   (list :shared)))
+               (nerimux/vcs::%read-worktree-status
+                 (lambda (worktree &key stashes)
+                   (declare (ignore stashes))
+                   (let* ((repository
+                            (nerimux/workspace-model:worktree-repository worktree))
+                          (first-p (member repository first-repositories :test #'eq))
+                          (release (if first-p release-first release-second)))
+                     (cl-concurrent-kit:with-lock-held (probe-lock)
+                       (incf active)
+                       (setf peak (max peak active))
+                       (if first-p
+                           (incf first-reads)
+                           (progn
+                             (incf second-reads)
+                             (sb-thread:signal-semaphore second-reader-started)))
+                       (when (and first-p (= active 64))
+                         (sb-thread:signal-semaphore first-saturated)))
+                     (unwind-protect
+                          (progn
+                            (unless (sb-thread:wait-on-semaphore release :timeout 10)
+                              (error "The overlapping status reader was not released"))
+                            (nerimux/workspace-model:worktree-path worktree))
+                       (cl-concurrent-kit:with-lock-held (probe-lock)
+                         (decf active)))))))
+            (unwind-protect
+                 (progn
+                   (setf first-threads
+                         (nerimux/vcs:refresh-workspace-status-async
+                          :organizations (list first-organization)
+                          :status-applier
+                          (lambda (repository updates)
+                            (declare (ignore repository updates))
+                            nil)))
+                   (expect (sb-thread:wait-on-semaphore first-saturated :timeout 10))
+                   (setf second-threads
+                         (nerimux/vcs:refresh-workspace-status-async
+                          :organizations (list second-organization)
+                          :on-start
+                          (lambda (repository)
+                            (declare (ignore repository))
+                            (sb-thread:signal-semaphore second-prepared))
+                          :status-applier
+                          (lambda (repository updates)
+                            (declare (ignore repository updates))
+                            nil)))
+                   (dotimes (index 17)
+                     (declare (ignore index))
+                     (expect
+                      (sb-thread:wait-on-semaphore second-prepared :timeout 10)))
+                   (dotimes (index 5)
+                     (declare (ignore index))
+                     (sb-thread:signal-semaphore release-first))
+                   (expect (sb-thread:wait-on-semaphore second-reader-started :timeout 10))
+                   (cl-concurrent-kit:with-lock-held (probe-lock)
+                     (expect (<= peak 64)))
+                   (dotimes (index 128)
+                     (declare (ignore index))
+                     (sb-thread:signal-semaphore release-first)
+                     (sb-thread:signal-semaphore release-second))
+                   (dolist (thread first-threads)
+                     (cl-concurrent-kit:join-thread thread :timeout 10))
+                   (dolist (thread second-threads)
+                     (cl-concurrent-kit:join-thread thread :timeout 10))
+                   (setf first-threads nil second-threads nil))
+              (progn
+                (dotimes (index 128)
+                  (declare (ignore index))
+                  (sb-thread:signal-semaphore release-first)
+                  (sb-thread:signal-semaphore release-second))
+                (dolist (thread first-threads)
+                  (cl-concurrent-kit:join-thread thread :timeout 10))
+                (dolist (thread second-threads)
+                  (cl-concurrent-kit:join-thread thread :timeout 10)))))
+          (expect (= 68 first-reads))
+          (expect (= 68 second-reads))
+          (expect (zerop active))
+          (expect (<= peak 64)))))
+    (it "stops a stale status pool after its settlement closure is dropped"
+      (let* ((repository
+               (nerimux/workspace-model:make-repository
+                :specification "workspace-owner/stale-pool"
+                :local-path "/tmp/stale-pool"))
+             (worktree
+               (nerimux/workspace-model:make-worktree
+                :repository repository :path "/tmp/stale-pool/main"))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :host "workspace-owner" :name "stale-pool"
+                :repositories (list repository)))
+             (probe-lock
+               (cl-concurrent-kit:make-lock :name "stale status pool probe"))
+             (old-reader-started (sb-thread:make-semaphore :count 0))
+             (release-old-reader (sb-thread:make-semaphore :count 0))
+             (new-reader-started (sb-thread:make-semaphore :count 0))
+             (old-settlement-ready (sb-thread:make-semaphore :count 0))
+             (new-settlement-ready (sb-thread:make-semaphore :count 0))
+             (read-count 0) (old-settlement nil) (new-settlement nil)
+             (old-threads nil) (new-threads nil))
+        (nerimux/workspace-model:repository-add-worktree repository worktree)
+        (with-stubbed-fdefinition
+            ((nerimux/vcs::%repository-status-shared-stashes
+               (lambda (current)
+                 (declare (ignore current))
+                 (list :shared)))
+             (nerimux/vcs::%read-worktree-status
+               (lambda (current &key stashes)
+                 (declare (ignore current stashes))
+                 (case (cl-concurrent-kit:with-lock-held (probe-lock)
+                         (incf read-count))
+                   (1
+                    (sb-thread:signal-semaphore old-reader-started)
+                    (unless (sb-thread:wait-on-semaphore release-old-reader :timeout 10)
+                      (error "The stale status reader was not released"))
+                    :old)
+                   (2
+                    (sb-thread:signal-semaphore new-reader-started)
+                    :new)
+                   (otherwise
+                    (error "Unexpected stale pool status read"))))))
+          (unwind-protect
+               (progn
+                 (setf old-threads
+                       (nerimux/vcs:refresh-workspace-status-async
+                        :organizations (list organization)
+                        :callback-dispatch
+                        (lambda (callback)
+                          (setf old-settlement callback)
+                          (sb-thread:signal-semaphore old-settlement-ready))
+                        :status-applier
+                        (lambda (current updates)
+                          (declare (ignore current updates))
+                          nil)))
+                 (expect (sb-thread:wait-on-semaphore old-reader-started :timeout 5))
+                 (setf new-threads
+                       (nerimux/vcs:refresh-workspace-status-async
+                        :organizations (list organization)
+                        :callback-dispatch
+                        (lambda (callback)
+                          (setf new-settlement callback)
+                          (sb-thread:signal-semaphore new-settlement-ready))
+                        :status-applier
+                        (lambda (current updates)
+                          (declare (ignore current updates))
+                          nil)))
+                 (expect (sb-thread:wait-on-semaphore new-reader-started :timeout 5))
+                 (expect (sb-thread:wait-on-semaphore new-settlement-ready :timeout 5))
+                 (sb-thread:signal-semaphore release-old-reader)
+                 (expect (sb-thread:wait-on-semaphore old-settlement-ready :timeout 5))
+                 (let ((stopped-p
+                        (every
+                         (lambda (thread)
+                           (handler-case
+                               (progn
+                                 (cl-concurrent-kit:join-thread thread :timeout 1)
+                                 (not (sb-thread:thread-alive-p thread)))
+                             (error () nil)))
+                         old-threads)))
+                   (expect stopped-p))
+                 (expect
+                  (every (lambda (thread) (not (sb-thread:thread-alive-p thread)))
+                         old-threads))
+                 (setf old-threads nil))
+            (progn
+              (sb-thread:signal-semaphore release-old-reader)
+              ;; The test dispatcher drops these closures; run them only during
+              ;; teardown so the baseline's stranded workers can exit cleanly.
+              (when new-settlement (funcall new-settlement))
+              (when old-settlement (funcall old-settlement))
+              (dolist (thread old-threads)
+                (cl-concurrent-kit:join-thread thread :timeout 10))
+              (dolist (thread new-threads)
+                (cl-concurrent-kit:join-thread thread :timeout 10)))))
+        (expect (= 2 read-count))))
+    (it "continues preparation workers after a settlement callback signals"
+      (let* ((repositories
+               (loop for index below 5
+                     collect
+                       (nerimux/workspace-model:make-repository
+                        :specification
+                        (format nil "workspace-owner/preparation-callback-~D" index)
+                        :local-path
+                        (format nil "/tmp/preparation-callback-~D" index))))
+             (organization
+               (nerimux/workspace-model:make-organization
+                :host "workspace-owner" :name "preparation-callback"
+                :repositories repositories))
+             (probe-lock
+               (cl-concurrent-kit:make-lock :name "preparation callback probe"))
+             (completed-event (sb-thread:make-semaphore :count 0))
+             (start-count 0) (error-count 0) (completion-count 0)
+             (threads nil))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs::%repository-status-shared-stashes
+               (lambda (repository)
+                 (declare (ignore repository))
+                 nil)))
+          (unwind-protect
+               (progn
+                 (setf threads
+                       (nerimux/vcs:refresh-workspace-status-async
+                        :organizations (list organization)
+                        :callback-dispatch
+                        (lambda (callback) (funcall callback))
+                        :on-start
+                        (lambda (repository)
+                          (declare (ignore repository))
+                          (cl-concurrent-kit:with-lock-held (probe-lock)
+                            (incf start-count))
+                          (error "Fixture start callback failed"))
+                        :on-error
+                        (lambda (repository condition)
+                          (declare (ignore repository condition))
+                          (cl-concurrent-kit:with-lock-held (probe-lock)
+                            (incf error-count))
+                          (error "Fixture status error callback failed"))
+                        :on-complete
+                        (lambda (completed-organizations)
+                          (expect (equal (list organization) completed-organizations))
+                          (cl-concurrent-kit:with-lock-held (probe-lock)
+                            (incf completion-count))
+                          (sb-thread:signal-semaphore completed-event))))
+                 (expect (= 4 (length threads)))
+                 (expect
+                  (sb-thread:wait-on-semaphore completed-event :timeout 5))
+                 (dolist (thread threads)
+                   (cl-concurrent-kit:join-thread thread :timeout 10))
+                 (setf threads nil))
+            (dolist (thread threads)
+              (cl-concurrent-kit:join-thread thread :timeout 10))))
+        (expect (= 5 start-count))
+        (expect (= 5 error-count))
+        (expect (= 1 completion-count))))
 
 
 )
