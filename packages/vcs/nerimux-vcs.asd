@@ -43,7 +43,7 @@
                (:version "cl-weave" "1.4.0"))
   :pathname "t"
   :serial t
-  :components ((:file "package")
+  :components ((:file "package") (:file "test-worker-waits")
                (:file "vcs-value-tests")
                (:file "vcs-worktree-status-tests")
                (:file "vcs-tests")

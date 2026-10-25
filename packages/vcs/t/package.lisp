@@ -19,4 +19,7 @@
                 #:pane-worktree)
   (:export #:%vcs-operations-existing-path
            #:%vcs-operations-fake-worktree
-           #:%vcs-operations-status-snapshot))
+           #:%vcs-operations-status-snapshot
+           #:+test-worker-timeout-seconds+
+           #:%wait-for-test-worker
+           #:%join-test-worker))

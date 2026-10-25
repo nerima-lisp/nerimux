@@ -453,17 +453,25 @@
     result))
 
 (defun %job-fetch-await (fixture repository)
-  (expect (sb-thread:wait-on-semaphore
-           (gethash repository (%job-fetch-fixture-entered fixture)))))
+  (%wait-for-test-worker
+   (lambda (timeout-seconds)
+     (sb-thread:wait-on-semaphore
+      (gethash repository (%job-fetch-fixture-entered fixture))
+      :timeout timeout-seconds))
+   (format nil
+           "workspace-job-fetch worker entering repository ~A"
+           (nerimux/workspace-model:repository-specification repository))))
 
 (defun %job-fetch-release (fixture repository)
   (sb-thread:signal-semaphore
    (gethash repository (%job-fetch-fixture-resume fixture))))
 
 (defun %job-fetch-join (fixture)
-  (dolist (thread (%job-fetch-fixture-threads fixture))
-    (sb-thread:join-thread thread)
-    (expect (not (sb-thread:thread-alive-p thread))))
+  (loop for thread in (%job-fetch-fixture-threads fixture)
+        for index from 1
+        do (%join-test-worker
+            thread
+            (format nil "workspace-job-fetch worker ~D" index)))
   (setf (%job-fetch-fixture-threads fixture) nil))
 
 (defun %call-with-job-fetch-fixture (count function)
@@ -600,7 +608,11 @@
                            :on-complete (lambda (result) (push result results)))))
              (dolist (repo repos) (%job-fetch-await f repo))
              (%job-fetch-release f failed)
-             (sb-thread:join-thread (first threads))
+             (%join-test-worker
+              (first threads)
+              (format nil
+                      "workspace-job-fetch worker for repository ~A"
+                      (nerimux/workspace-model:repository-specification failed)))
              (expect (not (sb-thread:thread-alive-p (first threads))))
              (%job-fetch-drain f)
              (expect (equal (list failed) errors))

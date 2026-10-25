@@ -43,7 +43,8 @@
   (:import-from #:nerimux/test/vcs
                 #:%vcs-operations-existing-path
                 #:%vcs-operations-fake-worktree
-                #:%vcs-operations-status-snapshot)
+                #:%vcs-operations-status-snapshot
+                #:%wait-for-test-worker)
   (:import-from #:nerimux/test/model
                 #:tl-pane
                 #:tl-leaf

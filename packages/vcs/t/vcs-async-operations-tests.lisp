@@ -427,15 +427,21 @@
 (defun %queued-repository-status-refresh (repository &rest options)
   (let ((queued nil))
     (let ((threads
-            (apply #'nerimux/vcs:refresh-repositories-async
+            (apply (function nerimux/vcs:refresh-repositories-async)
                    (list repository)
                    :callback-dispatch (lambda (callback) (push callback queued))
                    options)))
       (expect (= 1 (length threads)))
-      (dolist (thread threads)
-        (sb-thread:join-thread thread)))
-    (expect (= 1 (length queued)))
-    (first queued)))
+      (loop for thread in threads
+            for index from 1
+            do (%join-test-worker
+                thread
+                (format nil
+                        "repository status refresh worker ~D for ~A"
+                        index
+                        (nerimux/workspace-model:repository-local-path repository))))
+      (expect (= 1 (length queued)))
+      (first queued))))
 
 (describe "vcs overlapping repository status refresh"
   (it "rejects an older delivery while the newest result is still queued"

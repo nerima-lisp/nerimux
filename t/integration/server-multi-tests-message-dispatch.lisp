@@ -759,10 +759,19 @@
                     (lambda (condition)
                       (setf refresh-error condition
                             refresh-finished t)))
-                   (loop until (or refresh-finished
-                                   nerimux::*workspace-catalog-loaded-p*)
-                         do (nerimux::%drain-main-thread-callbacks)
-                            (sleep 0.01))
+                   (%wait-for-test-worker
+                    (lambda (timeout-seconds)
+                      (let ((deadline
+                              (+ (get-internal-real-time)
+                                 (round (* timeout-seconds
+                                           internal-time-units-per-second)))))
+                        (loop until refresh-finished
+                              do (when (>= (get-internal-real-time) deadline)
+                                   (return nil))
+                                 (nerimux::%drain-main-thread-callbacks)
+                                 (sleep 0.01))
+                        refresh-finished))
+                    "client picker status refresh callback")
                    (nerimux::%drain-main-thread-callbacks)
                    (expect refresh-finished)
                    (expect (null refresh-error)))
