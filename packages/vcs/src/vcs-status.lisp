@@ -31,15 +31,20 @@ or launch failure."))
   "Run git through VCS-KIT with a deadline and bounded octet capture."
   (let ((result
           (handler-case
-              (vcs-kit:run-vcs nil subcommand arguments
-                               :executable "git"
-                               :directory directory
-                               :input ""
-                               :timeout *git-read-timeout-seconds*
-                               :output :capture
-                               :error-output :capture
-                               :result-type :octets
-                               :max-output-characters *git-read-output-limit*)
+              (apply (function vcs-kit:run-vcs)
+                     nil subcommand arguments
+                     (append
+                      (list :executable "git"
+                            :directory directory
+                            :input ""
+                            :timeout *git-read-timeout-seconds*
+                            :output :capture
+                            :error-output :capture
+                            :result-type :octets
+                            :max-output-characters *git-read-output-limit*)
+                      (when *worktree-test-environment-update*
+                        (list :environment-update
+                              *worktree-test-environment-update*))))
             (vcs-kit:vcs-command-error ()
               (error '%git-read-error
                      :directory directory

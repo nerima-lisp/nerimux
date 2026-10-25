@@ -90,59 +90,78 @@
         (expect (= 15 (length timestamp)))
         (expect (char= #\T (char timestamp 8)))))))
 
+(defvar *worktree-path-test-git-environment* nil)
+
+(defun %worktree-path-test-git-environment (bindings)
+  (let ((overridden-names
+          (append (mapcar #'car bindings)
+                  '("GIT_DIR" "GIT_WORK_TREE"))))
+    (append
+     (remove-if
+      (lambda (entry)
+        (member (subseq entry 0 (or (position #\= entry) (length entry)))
+                overridden-names
+                :test #'string=))
+      (sb-ext:posix-environ))
+     (loop for (name . value) in bindings
+           when value
+             collect (format nil "~A=~A" name value)))))
+
+(defun %run-worktree-path-test-git (arguments)
+  (uiop:run-program arguments
+                    :environment *worktree-path-test-git-environment*
+                    :output :string
+                    :error-output :string))
+
+(defun %worktree-path-test-git (directory &rest arguments)
+  (string-trim '(#\Newline #\Return)
+               (%run-worktree-path-test-git
+                (append (list "git" "-C" directory) arguments))))
+
 (defun %call-with-isolated-test-git-environment (function)
   (let* ((root
-          (merge-pathnames
-           (format nil
-                   "nerimux-test-git-environment-~D-~D-~D/"
-                   (get-universal-time)
-                   (sb-posix:getpid)
-                   (incf *fake-repo-counter*))
-           (host-kit:temporary-directory)))
+           (merge-pathnames
+            (format nil
+                    "nerimux-test-git-environment-~D-~D-~D/"
+                    (get-universal-time)
+                    (sb-posix:getpid)
+                    (incf *fake-repo-counter*))
+            (host-kit:temporary-directory)))
          (home (merge-pathnames "home/" root))
          (xdg-config (merge-pathnames "xdg-config/" root))
          (global-config (merge-pathnames "config" root))
-         (template-directory (merge-pathnames "templates/" root)))
+         (template-directory (merge-pathnames "templates/" root))
+         (bindings
+           (list (cons "HOME" (namestring home))
+                 (cons "XDG_CONFIG_HOME" (namestring xdg-config))
+                 (cons "GIT_CONFIG_GLOBAL" (namestring global-config))
+                 (cons "GIT_CONFIG_NOSYSTEM" "1")
+                 (cons "GIT_CONFIG_COUNT" "0")
+                 (cons "GIT_CONFIG_PARAMETERS" nil)
+                 (cons "GIT_TEMPLATE_DIR" (namestring template-directory))))
+         (test-environment-update
+           (append bindings
+                   (quote (("GIT_DIR" . nil)
+                           ("GIT_WORK_TREE" . nil)))))
+         (environment
+           (let ((nerimux/vcs::*worktree-test-environment-update*
+                   test-environment-update))
+             (%worktree-path-test-git-environment
+              (nerimux/vcs::%worktree-operation-environment-update-for-child)))))
     (unwind-protect
-        (progn
-          (ensure-directories-exist home)
-          (ensure-directories-exist xdg-config)
-          (ensure-directories-exist template-directory)
-          (with-open-file
-              (stream global-config :direction :output :if-exists :error :if-does-not-exist :create)
-            (declare (ignore stream)))
-          (let* ((bindings
-                  (list (cons "HOME" (namestring home))
-                        (cons "XDG_CONFIG_HOME" (namestring xdg-config))
-                        (cons "GIT_CONFIG_GLOBAL" (namestring global-config))
-                        (cons "GIT_CONFIG_NOSYSTEM" "1")
-                        (cons "GIT_CONFIG_COUNT" "0")
-                        (cons "GIT_CONFIG_PARAMETERS" nil)
-                        (cons "GIT_TEMPLATE_DIR" (namestring template-directory))))
-                 (original
-                  (mapcar
-                   (lambda (binding)
-                     (cons (car binding) (sb-ext:posix-getenv (car binding))))
-                   bindings)))
-            (unwind-protect
-                (progn
-                  (dolist (binding bindings)
-                    (unless
-                        (zerop
-                         (if (cdr binding)
-                             (sb-posix:setenv (car binding) (cdr binding) 1)
-                             (sb-posix:unsetenv (car binding))))
-                      (error "Could not set Git test environment variable ~A" (car binding))))
-                  (funcall function))
-              (dolist (binding original)
-                (unless
-                    (zerop
-                     (if (cdr binding)
-                         (sb-posix:setenv (car binding) (cdr binding) 1)
-                         (sb-posix:unsetenv (car binding))))
-                  (error "Could not restore environment variable ~A" (car binding))))))
-          (when (probe-file root)
-            (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore))))))
+         (progn
+           (ensure-directories-exist home)
+           (ensure-directories-exist xdg-config)
+           (ensure-directories-exist template-directory)
+           (with-open-file
+               (stream global-config :direction :output :if-exists :error :if-does-not-exist :create)
+             (declare (ignore stream)))
+           (let ((*worktree-path-test-git-environment* environment)
+                 (nerimux/vcs::*worktree-test-environment-update*
+                   test-environment-update))
+             (funcall function)))
+      (when (probe-file root)
+        (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore)))))
 (defun %call-with-worktree-path-repository (function)
   (%call-with-isolated-test-git-environment
    (lambda ()
@@ -151,16 +170,15 @@
             (bare (concatenate (quote string) root "repository.git/")))
        (unwind-protect
             (progn
-              (uiop:run-program (list "git" "init" "--initial-branch=main" source)
-                                :output :string :error-output :string)
-              (uiop:run-program
+              (%run-worktree-path-test-git
+               (list "git" "init" "--initial-branch=main" source))
+              (%run-worktree-path-test-git
                (list "git" "-C" source "-c" "user.name=Test"
                      "-c" "user.email=test@example.invalid"
                      "-c" "commit.gpgsign=false" "-c" "core.hooksPath=/dev/null"
-                     "commit" "--allow-empty" "-m" "fixture")
-               :output :string :error-output :string)
-              (uiop:run-program (list "git" "clone" "--bare" source bare)
-                                :output :string :error-output :string)
+                     "commit" "--allow-empty" "-m" "fixture"))
+              (%run-worktree-path-test-git
+               (list "git" "clone" "--bare" source bare))
               (let* ((repository
                        (nerimux/workspace-model:make-repository
                         :specification "workspace-owner/path-fixture"
@@ -212,11 +230,7 @@
        (expect (eq created (nerimux/workspace-model:repository-worktree-by-path
                             repository expected-path)))
        (expect (string= "path-test"
-                        (string-trim '(#\Newline #\Return)
-                                     (uiop:run-program
-                                      (list "git" "-C" expected-path
-                                            "symbolic-ref" "--short" "HEAD")
-                                      :output :string :error-output :string))))))))
+                        (%worktree-path-test-git expected-path "symbolic-ref" "--short" "HEAD")))))))
 
 (describe "renderer-suite/vcs-worktree-path-real-git"
   (it "returns the canonical model for a relative synchronous path"
@@ -258,8 +272,8 @@
               (create-errors nil)
               (reused nil)
               (reuse-errors nil))
-         (%fetch-test-git source "checkout" "-b" branch)
-         (%fetch-test-git
+         (%worktree-path-test-git source "checkout" "-b" branch)
+         (%worktree-path-test-git
           source
           "-c" "user.name=Test"
           "-c" "user.email=test@example.invalid"
@@ -267,11 +281,11 @@
           "-c" "core.hooksPath=/dev/null"
           "commit" "--allow-empty" "-m" "remote-only branch fixture")
          (progn
-           (%fetch-test-git bare "config" "remote.origin.url" source)
-           (%fetch-test-git
+           (%worktree-path-test-git bare "config" "remote.origin.url" source)
+           (%worktree-path-test-git
             bare "config" "--replace-all" "remote.origin.fetch"
             "+refs/heads/*:refs/remotes/origin/*"))
-         (%fetch-test-git
+         (%worktree-path-test-git
           bare
           "fetch"
           "origin"
@@ -281,7 +295,7 @@
          (expect
           (string=
            ""
-           (%fetch-test-git
+           (%worktree-path-test-git
             bare
             "for-each-ref"
             "--format=%(refname)"
@@ -289,7 +303,7 @@
          (expect
           (string=
            remote-reference
-           (%fetch-test-git
+           (%worktree-path-test-git
             bare
             "for-each-ref"
             "--format=%(refname)"
@@ -330,11 +344,11 @@
          (expect
           (string=
            branch
-           (%fetch-test-git branch-path "branch" "--show-current")))
+           (%worktree-path-test-git branch-path "branch" "--show-current")))
          (expect
           (string=
            "origin/feature/remote-only"
-           (%fetch-test-git
+           (%worktree-path-test-git
             branch-path
             "rev-parse"
             "--abbrev-ref"
@@ -342,8 +356,8 @@
             "@{upstream}")))
          (expect
           (string=
-           (%fetch-test-git bare "rev-parse" remote-reference)
-           (%fetch-test-git
+           (%worktree-path-test-git bare "rev-parse" remote-reference)
+           (%worktree-path-test-git
             bare
             "rev-parse"
             "refs/heads/feature/remote-only")))
@@ -398,7 +412,7 @@
                        (uiop:read-file-string
                         (concatenate 'string source ".git/info/exclude"))))
        (expect (string= ""
-                        (%fetch-test-git source "status" "--short"))))))
+                        (%worktree-path-test-git source "status" "--short"))))))
 
   (it "puts a checkout's worktrees beside it when the ignore cannot be written"
     (%call-with-worktree-path-checkout
@@ -419,9 +433,9 @@
      (lambda (repository source)
        (expect (null (nerimux/vcs::%repository-origin-p repository)))
        (expect (string= "main" (nerimux/vcs::%repository-default-branch repository)))
-       (%fetch-test-git source "branch" "-m" "trunk")
+       (%worktree-path-test-git source "branch" "-m" "trunk")
        (expect (string= "trunk" (nerimux/vcs::%repository-default-branch repository)))
-       (expect (string= (%fetch-test-git source "rev-parse" "HEAD")
+       (expect (string= (%worktree-path-test-git source "rev-parse" "HEAD")
                         (nerimux/vcs::%default-branch-start-point repository)))
        (expect (null (nerimux/vcs::%fetch-default-branch repository "trunk"))))))
 
@@ -461,23 +475,23 @@
                              "ambiguous"))
               (completed nil)
               (errors nil))
-         (%fetch-test-git source "checkout" "-b" "topic")
-         (%fetch-test-git source "checkout" "main")
-         (%fetch-test-git source "checkout" "-b" "origin/topic")
-         (%fetch-test-git bare "config" "remote.origin.url" source)
-         (%fetch-test-git
+         (%worktree-path-test-git source "checkout" "-b" "topic")
+         (%worktree-path-test-git source "checkout" "main")
+         (%worktree-path-test-git source "checkout" "-b" "origin/topic")
+         (%worktree-path-test-git bare "config" "remote.origin.url" source)
+         (%worktree-path-test-git
           bare "fetch" "origin"
           "refs/heads/topic:refs/remotes/origin/topic"
           "refs/heads/origin/topic:refs/remotes/origin/origin/topic")
          (expect
           (string=
            "refs/remotes/origin/topic"
-           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(refname)"
                             "refs/remotes/origin/topic")))
          (expect
           (string=
            "refs/remotes/origin/origin/topic"
-           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(refname)"
                             "refs/remotes/origin/origin/topic")))
          (sb-thread:join-thread
           (nerimux/vcs:create-worktree-async
@@ -489,7 +503,7 @@
          (expect
           (string=
            ""
-           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(refname)"
                             "refs/heads/origin/topic")))
          (expect (null (probe-file branch-path))))))
   )
@@ -517,12 +531,12 @@
          (expect
           (string=
            (concatenate 'string "refs/heads/" branch)
-           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(refname)"
                             (concatenate 'string "refs/heads/" branch))))
          (expect
           (string=
            ""
-           (%fetch-test-git bare "for-each-ref" "--format=%(upstream)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(upstream)"
                             (concatenate 'string "refs/heads/" branch)))))))
   )
   (it "rejects empty and outside paths before creating branches"
@@ -549,7 +563,7 @@
            (expect
             (string=
              ""
-             (%fetch-test-git
+             (%worktree-path-test-git
               bare "for-each-ref" "--format=%(refname)"
               (concatenate 'string "refs/heads/" branch)))))))))
   (it "removes a newly created branch when attaching its worktree fails"
@@ -574,7 +588,7 @@
          (expect
           (string=
            ""
-           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(refname)"
                             (concatenate 'string "refs/heads/" branch))))
          (expect (string= "fixture"
                           (string-right-trim '(#\Newline #\Return)
@@ -586,9 +600,9 @@
      (lambda (repository root)
        (declare (ignore root))
        (let* ((bare (nerimux/workspace-model:repository-local-path repository))
-              (remote-output (%fetch-test-git bare "remote"))
+              (remote-output (%worktree-path-test-git bare "remote"))
               (ref-output
-                (%fetch-test-git
+                (%worktree-path-test-git
                  bare "for-each-ref" "--format=%(refname)%00%(symref)"
                  "refs/heads/" "refs/remotes/"))
               (limit (1+ (length remote-output)))
@@ -648,8 +662,8 @@
                                       "foo-checkout"))
                         (candidates nil)
                         (errors nil))
-                   (%fetch-test-git source "checkout" "-b" "foo")
-                   (%fetch-test-git
+                   (%worktree-path-test-git source "checkout" "-b" "foo")
+                   (%worktree-path-test-git
                     source
                     "-c" "user.name=Test"
                     "-c" "user.email=test@example.invalid"
@@ -658,19 +672,19 @@
                     "commit" "--allow-empty" "-m" "remote checkout identity fixture")
                    (dolist (remote '("origin" "upstream"))
                      (if (string= remote "origin")
-                         (%fetch-test-git bare "remote" "set-url" remote source)
-                       (%fetch-test-git bare "remote" "add" remote source))
-                     (%fetch-test-git
+                         (%worktree-path-test-git bare "remote" "set-url" remote source)
+                       (%worktree-path-test-git bare "remote" "add" remote source))
+                     (%worktree-path-test-git
                       bare "config" "--replace-all"
                       (format nil "remote.~A.fetch" remote)
                       (format nil "+refs/heads/*:refs/remotes/~A/*" remote))
-                     (%fetch-test-git
+                     (%worktree-path-test-git
                       bare "fetch" remote
                       (format nil "refs/heads/foo:refs/remotes/~A/foo" remote)))
-                   (%fetch-test-git bare "branch" "foo" "refs/remotes/origin/foo")
-                   (%fetch-test-git bare "config" "branch.foo.remote" "origin")
-                   (%fetch-test-git bare "config" "branch.foo.merge" "refs/heads/foo")
-                   (%fetch-test-git bare "worktree" "add" worktree-path "foo")
+                   (%worktree-path-test-git bare "branch" "foo" "refs/remotes/origin/foo")
+                   (%worktree-path-test-git bare "config" "branch.foo.remote" "origin")
+                   (%worktree-path-test-git bare "config" "branch.foo.merge" "refs/heads/foo")
+                   (%worktree-path-test-git bare "worktree" "add" worktree-path "foo")
                    (sb-thread:join-thread
                     (nerimux/vcs:list-worktree-branch-candidates-async
                      repository
@@ -701,29 +715,29 @@
                                         "foo-checkout"))
               (errors nil)
               (created nil))
-         (%fetch-test-git source "checkout" "-b" "foo")
-         (%fetch-test-git
+         (%worktree-path-test-git source "checkout" "-b" "foo")
+         (%worktree-path-test-git
           source
           "-c" "user.name=Test"
           "-c" "user.email=test@example.invalid"
           "-c" "commit.gpgsign=false"
           "-c" "core.hooksPath=/dev/null"
           "commit" "--allow-empty" "-m" "remote foo fixture")
-         (%fetch-test-git bare "remote" "set-url" "origin" source)
-         (%fetch-test-git
+         (%worktree-path-test-git bare "remote" "set-url" "origin" source)
+         (%worktree-path-test-git
           bare "config" "--replace-all" "remote.origin.fetch"
           "+refs/heads/*:refs/remotes/origin/*")
-         (%fetch-test-git bare "fetch" "origin" "refs/heads/foo:refs/remotes/origin/foo")
-         (%fetch-test-git bare "branch" "foo")
+         (%worktree-path-test-git bare "fetch" "origin" "refs/heads/foo:refs/remotes/origin/foo")
+         (%worktree-path-test-git bare "branch" "foo")
          (expect
           (string=
            "refs/heads/foo"
-           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(refname)"
                             "refs/heads/foo")))
          (expect
           (string=
            ""
-           (%fetch-test-git bare "for-each-ref" "--format=%(upstream)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(upstream)"
                             "refs/heads/foo")))
          (sb-thread:join-thread
           (nerimux/vcs:create-worktree-async
@@ -739,5 +753,6 @@
          (expect
           (string=
            "refs/remotes/origin/foo"
-           (%fetch-test-git bare "for-each-ref" "--format=%(refname)"
+           (%worktree-path-test-git bare "for-each-ref" "--format=%(refname)"
                             "refs/remotes/origin/foo"))))))))
+

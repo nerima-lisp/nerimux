@@ -11,9 +11,20 @@
     ("GIT_SSH_COMMAND" . "ssh -oBatchMode=yes"))
   "Environment updates that keep Git worktree writes non-interactive.")
 
+(defvar *worktree-test-environment-update* nil)
+
+(defun %worktree-operation-environment-update-for-child ()
+  (append
+   (remove-if
+    (lambda (entry)
+      (assoc (car entry) *worktree-test-environment-update* :test (function string=)))
+    *worktree-operation-environment-update*)
+   *worktree-test-environment-update*))
+
 (defun %worktree-operation-execution-options ()
   (list :timeout *worktree-operation-timeout-seconds*
-        :environment-update *worktree-operation-environment-update*))
+        :environment-update
+        (%worktree-operation-environment-update-for-child)))
 
 (defstruct worktree-prune-snapshot identity content changed-files)
 
@@ -174,9 +185,13 @@ the base name already exists."
    (%string-value (nerimux/workspace-model:repository-local-path repository))))
 
 (defun %rev-parse (repository &rest arguments)
-  (apply #'vcs-kit:git-rev-parse-value
+  (apply (function vcs-kit:git-rev-parse-value)
          (%repository-checked-handle repository)
-         arguments))
+         (append arguments
+                 (when *worktree-test-environment-update*
+                   (list :execution-options
+                         (list :environment-update
+                               *worktree-test-environment-update*))))))
 
 (defun %bare-repository-layout-p (repository)
   "True when REPOSITORY holds no checkout of its own.
@@ -386,29 +401,31 @@ false DRY-RUN once a user has explicitly confirmed the operation."
                                       on-complete
                                       on-error
                                       callback-dispatch &optional on-start)
-  (cl-concurrent-kit:make-thread
-   (lambda ()
-     (%dispatch-callback callback-dispatch on-start)
-     (handler-case (let ((worker-result (funcall worker)))
-                     (%dispatch-callback callback-dispatch
-                                         (lambda ()
-                                           (handler-case (let ((result
-                                                                (funcall
-                                                                 apply-result
-                                                                 worker-result)))
-                                                           (when on-complete
-                                                             (funcall
-                                                              on-complete
-                                                              result)))
-                                             (error (condition)
-                                               (when on-error
-                                                 (funcall on-error condition))))))
-                     worker-result)
-       (error (condition)
-         (%dispatch-callback callback-dispatch on-error condition)
-         nil)))
-   :name
-   name))
+  (let ((test-environment-update *worktree-test-environment-update*))
+    (cl-concurrent-kit:make-thread
+     (lambda ()
+       (let ((*worktree-test-environment-update* test-environment-update))
+         (%dispatch-callback callback-dispatch on-start)
+         (handler-case (let ((worker-result (funcall worker)))
+                         (%dispatch-callback callback-dispatch
+                                             (lambda ()
+                                               (handler-case (let ((result
+                                                                    (funcall
+                                                                     apply-result
+                                                                     worker-result)))
+                                                               (when on-complete
+                                                                 (funcall
+                                                                  on-complete
+                                                                  result)))
+                                                 (error (condition)
+                                                   (when on-error
+                                                     (funcall on-error condition))))))
+                         worker-result)
+           (error (condition)
+             (%dispatch-callback callback-dispatch on-error condition)
+             nil))))
+     :name
+     name)))
 
 (defstruct 
     (%worktree-operation-result (:constructor %make-worktree-operation-result))
