@@ -937,28 +937,33 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
           (expect (= path-count full-deletions))
           (expect (= full-additions selected-additions))
           (expect (= full-deletions selected-deletions))))))
-  (it "numstat regression logs numstat failures while returning zero counts"
-    (let ((logged-message nil)
-          (additions nil)
-          (deletions nil))
-      (handler-bind
-          ((warning
-             (lambda (condition)
-               (setf logged-message (format nil "~A" condition))
-               (muffle-warning condition))))
-        (with-stubbed-fdefinition
-            ((nerimux/vcs::%git-numstat-entries
-              (lambda (&rest arguments)
-                (declare (ignore arguments))
-                (error "forced numstat failure"))))
-          (multiple-value-setq (additions deletions)
-            (nerimux/vcs::%worktree-status-diff-line-counts
-             "/fixture"
-             (list (vcs-kit::%make-vcs-status-entry
-                    :kind :ordinary :index-status "." :worktree-status "M"
-                    :path "tracked.txt"))))))
-      (expect logged-message)
-      (expect (and logged-message (search "numstat" (string-downcase logged-message))))
+  (it
+    "logs numstat failures through the VCS diagnostic logger while returning zero counts"
+    (let* ((additions nil)
+           (deletions nil)
+           (log-output
+             (with-output-to-string (stream)
+               (let ((nerimux/vcs::*vcs-diagnostic-logger*
+                       (log-kit:make-logger
+                        :name "nerimux/vcs-test"
+                        :handler (make-instance 'log-kit:text-handler :stream stream)
+                        :level log-kit:+level-info+)))
+                 (with-stubbed-fdefinition
+                     ((nerimux/vcs::%git-numstat-entries
+                        (lambda (&rest arguments)
+                          (declare (ignore arguments))
+                          (error "forced numstat failure"))))
+                   (multiple-value-setq (additions deletions)
+                     (nerimux/vcs::%worktree-status-diff-line-counts
+                      "/fixture"
+                      (list
+                       (vcs-kit::%make-vcs-status-entry
+                        :kind :ordinary
+                        :index-status "."
+                        :worktree-status "M"
+                        :path "tracked.txt")))))))))
+      (expect (search "Git numstat failed in /fixture" log-output))
+      (expect (search "forced numstat failure" log-output))
       (expect (= 0 additions))
       (expect (= 0 deletions)))))
 (describe "vcs numstat fallback diagnostic logging"
