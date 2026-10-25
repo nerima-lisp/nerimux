@@ -8,11 +8,11 @@ A workspace-oriented terminal multiplexer written entirely in Common Lisp,
 with a [magit](https://magit.vc/)-style keymap. The primary UI is a repolist
 of three sections, Attention, Active, and Repositories, plus a thin client
 attached to a headless runtime. The entry
-surface is workspace-only: `attach`, `server`, and `kill` are the only commands.
+surface provides the `attach`, `server`, and `kill` workspace commands, plus
+`doctor` for environment checks.
 The core regression suite runs hermetically through Nix; live PTY integration
 is an explicit host-side check.
 
-Full documentation is published at <https://nerima-lisp.github.io/nerimux/>.
 The source for that site lives in [docs/src/](docs/src/).
 
 ## Quick Start
@@ -28,6 +28,12 @@ nix run github:nerima-lisp/nerimux -- kill  # stop the server
 
 The examples use the flake directly. After `nix build .`, invoke the same
 commands with `./result/bin/nerimux`.
+
+Run `nerimux doctor` to inspect the setup, or use `./result/bin/nerimux doctor`
+from a checkout. The report shows whether Git and ghq are available. Both must
+be on `PATH` for repository discovery, cloning, and worktree operations. A
+missing ghq is reported but does not alone make the command exit with a failure
+status.
 
 `attach` auto-starts the headless runtime and connects a thin client. Running
 `nerimux` with no command at all is the same as `attach`; only an
@@ -58,9 +64,8 @@ inputs.nerimux = {
 Note the pinned tag. Consumers inside this org must pin a release tag rather
 than follow the default branch.
 
-Nix is the only supported build path: it pins SBCL and every Lisp dependency,
-so a build either reproduces exactly or fails loudly. From a checkout,
-`nix build .` produces `./result/bin/nerimux`.
+Nix is the only supported build path; it pins SBCL and every Lisp dependency.
+From a checkout, `nix build .` produces `./result/bin/nerimux`.
 
 ## Documentation
 
@@ -99,6 +104,8 @@ separately with `nix run .#test-pty` because the hermetic flake gate has no
 `/dev/ptmx`. A separate end-to-end smoke script drives the real built binary
 under a real PTY; run it with `nix run .#e2e` for the same `/dev/ptmx`
 reason.
+
+For the live terminal harness, see [the live harness guide](tests/live/README.md).
 
 nerimux is the org's L4 application package and its testbed: it runs on the
 sibling libraries, [cl-cli](https://github.com/nerima-lisp/cl-cli),
