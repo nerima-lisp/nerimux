@@ -107,11 +107,35 @@
            when value
              collect (format nil "~A=~A" name value)))))
 
+(defun %signal-worktree-path-test-git-failure
+    (arguments directory exit-code stderr &optional cause)
+  (error "~A"
+         (nerimux/vcs::%redact-clone-credentials
+          (format nil
+                  "fixture git failed: argv=~S cwd=~A exit-code=~S stderr=~A~@[ cause=~A~]"
+                  arguments
+                  (namestring directory)
+                  exit-code
+                  (or stderr "")
+                  cause))))
+
 (defun %run-worktree-path-test-git (arguments)
-  (uiop:run-program arguments
-                    :environment *worktree-path-test-git-environment*
-                    :output :string
-                    :error-output :string))
+  (let ((directory (uiop:getcwd)))
+    (multiple-value-bind (stdout stderr exit-code)
+        (handler-case
+            (uiop:run-program arguments
+                              :directory directory
+                              :environment *worktree-path-test-git-environment*
+                              :output :string
+                              :error-output :string
+                              :ignore-error-status t)
+          (error (condition)
+            (%signal-worktree-path-test-git-failure
+             arguments directory nil "" condition)))
+      (unless (eql 0 exit-code)
+        (%signal-worktree-path-test-git-failure
+         arguments directory exit-code stderr))
+      stdout)))
 
 (defun %worktree-path-test-git (directory &rest arguments)
   (string-trim '(#\Newline #\Return)
