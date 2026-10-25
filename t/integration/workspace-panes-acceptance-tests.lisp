@@ -85,6 +85,26 @@
           (nerimux::%handle-multi-key-message session conn #(27))
           (expect (null (nerimux::client-conn-modal conn)))
           (expect (= 0 spawns deletes))))))
+  (it "notifies after a detached worktree opens in shell mode"
+    (%with-assignment-fixture
+      (with-stubbed-fdefinition
+          ((nerimux/vcs:create-detached-worktree-async
+            (lambda (repo &key on-complete &allow-other-keys)
+              (expect (eq repository repo))
+              (funcall on-complete receipt)))
+           (nerimux::%open-client-worktree-pane
+            (lambda (received-session received-conn received-worktree)
+              (expect (eq session received-session))
+              (expect (eq conn received-conn))
+              (expect (eq worktree received-worktree))
+              t)))
+        (nerimux::%client-create-detached-worktree
+         repository conn session :mode :shell)
+        (expect (eq :done
+                    (nerimux::workspace-assignment-phase
+                     (nerimux::client-conn-workspace-assignment conn))))
+        (expect (string= "worktree ready: /tmp/assignment.git/.worktrees/new"
+                         (first (nerimux::client-conn-message-log conn)))))))
   (it "uses w n for detached creation and a for an existing workspace"
     (%with-assignment-fixture
       (let ((created 0) (selected nil))

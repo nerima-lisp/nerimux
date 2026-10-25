@@ -458,10 +458,14 @@ worktree, for callers that already know what the worktree is for."
                        (%set-client-selected-worktree conn worktree)
                        (if (eq mode :shell)
                            (when (and session
-                                      (%open-client-worktree-pane session conn
-                                                                  worktree))
+                                      (%open-client-worktree-pane session conn worktree))
                              (setf (workspace-assignment-phase state) :done)
-                             (%set-client-view conn :pane))
+                             (%set-client-view conn :pane)
+                             (%client-notify
+                              conn
+                              (format nil "worktree ready: ~A"
+                                      (%worktree-display-path
+                                       (workspace-assignment-path state)))))
                            (%show-worktree-assignment conn state)))))
                (%mark-dirty))))
         (error (condition) (failed condition)))))
