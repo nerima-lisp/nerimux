@@ -79,11 +79,15 @@ handle."
           (mapcar #'vcs-kit::%vcs-status-entry (vcs-kit:status-snapshot-entries parsed)))
     snapshot))
 
-(defun %git-numstat-entries (directory)
-  "DIRECTORY's `git diff --numstat -z` as VCS-KIT:NUMSTAT-ENTRY structs,
-parsed with VCS-KIT:PARSE-NUMSTAT against %RUN-GIT-READ's output instead of a
-checked git-layer repository handle."
-  (vcs-kit:parse-numstat (%run-git-read directory "diff" "--numstat" "-z")))
+(defun %git-numstat-entries (directory &optional paths)
+  "Return DIRECTORY git diff numstat entries, restricted to literal PATHS when supplied."
+  (vcs-kit:parse-numstat
+   (if paths
+       (apply (function %run-git-read) directory "diff" "--numstat" "-z" "--"
+              (mapcar
+               (lambda (path) (concatenate (quote string) ":(literal)" path))
+               paths))
+       (%run-git-read directory "diff" "--numstat" "-z"))))
 
 (defun %changed-file-code (entry)
   "The 2-char git-status---short-style code for ENTRY (D1). :ORDINARY,
@@ -191,17 +195,38 @@ that duplication is magit's own display behaviour, not a bug."
 column, worktree side) -- magit's unstaged section (Unit MODEL)."
   (%collect-status-files entries vcs-kit:vcs-status-entry-worktree-status))
 
-(defun %worktree-status-diff-line-counts (path)
-  "Return additions and deletions from PATH's worktree diff."
+(defun %worktree-status-diff-line-counts (directory &optional (entries nil entries-supplied-p))
+  "Return additions and deletions for eligible paths in DIRECTORY."
   (handler-case
-      (let ((additions 0)
-            (deletions 0))
-        (dolist (entry (%git-numstat-entries path)
-                       (values additions deletions))
-          (incf additions (or (vcs-kit:numstat-entry-additions entry) 0))
-          (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0))))
-    (error ()
-      (values 0 0))))
+      (let* ((paths
+              (when entries-supplied-p
+                (loop for entry in entries
+                      for kind = (vcs-kit:vcs-status-entry-kind entry)
+                      when (case kind
+                             ((:untracked :ignored) nil)
+                             (:unmerged t)
+                             ((:ordinary :rename-or-copy)
+                              (%changed-file-column-set-p
+                               (vcs-kit:vcs-status-entry-worktree-status entry)))
+                             (otherwise t))
+                      append
+                      (cons (vcs-kit:vcs-status-entry-path entry)
+                            (when (eq kind :rename-or-copy)
+                              (let ((original
+                                     (vcs-kit:vcs-status-entry-original-path entry)))
+                                (and original (list original))))))))
+             (numstat-entries
+              (if entries-supplied-p
+                  (and paths (%git-numstat-entries directory paths))
+                (%git-numstat-entries directory))))
+        (if (and entries-supplied-p (null paths))
+            (values 0 0)
+          (let ((additions 0)
+                (deletions 0))
+            (dolist (entry numstat-entries (values additions deletions))
+              (incf additions (or (vcs-kit:numstat-entry-additions entry) 0))
+              (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0))))))
+    (error (condition) (declare (ignore condition)) (values 0 0))))
 
 (declaim (ftype function %read-stashes-at))
 
@@ -226,8 +251,17 @@ once reads it exactly once and passes the same reading down (see
                (stash-reading
                  (if stashes-supplied-p stashes (%read-stashes-at directory))))
           (multiple-value-bind (additions deletions)
-              (if entries
-                  (%worktree-status-diff-line-counts directory)
+              (if (some
+                   (lambda (entry)
+                     (case (vcs-kit:vcs-status-entry-kind entry)
+                       ((:untracked :ignored) nil)
+                       (:unmerged t)
+                       ((:ordinary :rename-or-copy)
+                        (%changed-file-column-set-p
+                         (vcs-kit:vcs-status-entry-worktree-status entry)))
+                       (otherwise t)))
+                   entries)
+                  (%worktree-status-diff-line-counts directory entries)
                   (values 0 0))
             (%make-worktree-status-update
              :path path :snapshot snapshot

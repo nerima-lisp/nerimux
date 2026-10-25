@@ -458,44 +458,119 @@
           (expect (equal (list (cons "stash@{0}" "WIP on main"))
                          (nerimux/workspace-model:worktree-stashes worktree-b))))))))
 
+(describe "vcs status diff eligibility (M2)"
+  (it "%read-worktree-status-at selects only eligible raw paths"
+    (flet ((read-status (entries &optional numstat-result)
+             (let ((numstat-calls 0)
+                   (numstat-paths nil)
+                   (path (namestring (host-kit:temporary-directory))))
+               (with-stubbed-fdefinition
+                   ((nerimux/vcs::%git-status-snapshot
+                     (lambda (&rest arguments)
+                       (declare (ignore arguments))
+                       (vcs-kit::%make-vcs-status-snapshot
+                        :branch-head "wt-head" :ahead 0 :behind 0 :entries entries)))
+                    (nerimux/vcs::%git-numstat-entries
+                     (lambda (directory &optional paths)
+                       (declare (ignore directory))
+                       (incf numstat-calls)
+                       (setf numstat-paths paths)
+                       numstat-result)))
+                 (values
+                  (nerimux/vcs::%read-worktree-status-at
+                   path nil path :stashes (cons :ready nil))
+                  numstat-calls
+                  numstat-paths)))))
+      (multiple-value-bind (update calls paths)
+          (read-status nil)
+        (expect (= 0 calls))
+        (expect (null paths))
+        (expect (= 0 (nerimux/vcs::%worktree-status-update-additions update)))
+        (expect (= 0 (nerimux/vcs::%worktree-status-update-deletions update))))
+      (dolist (entry
+               (list
+                (vcs-kit::%make-vcs-status-entry
+                 :kind :ordinary :index-status "M" :worktree-status "." :path "staged.lisp")
+                (vcs-kit::%make-vcs-status-entry :kind :untracked :path "new.txt")))
+        (multiple-value-bind (update calls paths)
+            (read-status (list entry))
+          (expect (= 0 calls))
+          (expect (null paths))
+          (expect (= 0 (nerimux/vcs::%worktree-status-update-additions update)))
+          (expect (= 0 (nerimux/vcs::%worktree-status-update-deletions update)))))
+      (multiple-value-bind (update calls paths)
+          (read-status
+           (list (vcs-kit::%make-vcs-status-entry
+                  :kind :ordinary :index-status "M" :worktree-status "."
+                  :path "staged.lisp")
+                 (vcs-kit::%make-vcs-status-entry :kind :untracked :path "new.txt")
+                 (vcs-kit::%make-vcs-status-entry
+                  :kind :ordinary :index-status "." :worktree-status "M"
+                  :path "unstaged.lisp"))
+           (list (vcs-kit::%make-numstat-entry
+                  :additions 5 :deletions 2 :path "unstaged.lisp")))
+        (expect (= 1 calls))
+        (expect (equal (list "unstaged.lisp") paths))
+        (expect (= 5 (nerimux/vcs::%worktree-status-update-additions update)))
+        (expect (= 2 (nerimux/vcs::%worktree-status-update-deletions update))))
+      (multiple-value-bind (update calls paths)
+          (read-status
+           (list (vcs-kit::%make-vcs-status-entry
+                  :kind :unmerged :index-status "U" :worktree-status "U"
+                  :path "conflict.lisp")))
+        (expect (= 1 calls))
+        (expect (equal (list "conflict.lisp") paths))
+        (expect (= 0 (nerimux/vcs::%worktree-status-update-additions update)))
+        (expect (= 0 (nerimux/vcs::%worktree-status-update-deletions update))))
+      (multiple-value-bind (update calls paths)
+          (read-status
+           (list (vcs-kit::%make-vcs-status-entry
+                  :kind :rename-or-copy :index-status "R" :worktree-status "M"
+                  :path "new-name.lisp" :original-path "old-name.lisp"))
+           (list (vcs-kit::%make-numstat-entry
+                  :additions 3 :deletions 1 :path "new-name.lisp")))
+        (expect (= 1 calls))
+        (expect (equal (list "new-name.lisp" "old-name.lisp") paths))
+        (expect (= 3 (nerimux/vcs::%worktree-status-update-additions update)))
+        (expect (= 1 (nerimux/vcs::%worktree-status-update-deletions update)))))))
 (describe "vcs status skips the diff pass when nothing changed (perf)"
   (it "%read-worktree-status-at calls git-diff-numstat only for a worktree with entries"
     (let ((numstat-calls 0))
       (let ((path (namestring (host-kit:temporary-directory))))
         (with-stubbed-fdefinition
             ((nerimux/vcs::%git-status-snapshot
-               (lambda (&rest arguments)
-                 (declare (ignore arguments))
-                 (vcs-kit::%make-vcs-status-snapshot
-                  :branch-head "wt-head" :ahead 0 :behind 0 :entries nil)))
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (vcs-kit::%make-vcs-status-snapshot
+                 :branch-head "wt-head" :ahead 0 :behind 0 :entries nil)))
              (nerimux/vcs::%git-numstat-entries
-               (lambda (&rest arguments)
-                 (declare (ignore arguments))
-                 (incf numstat-calls)
-                 nil))
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (incf numstat-calls)
+                nil))
              (nerimux/vcs::%git-stash-entries
-               (lambda (&rest arguments) (declare (ignore arguments)) nil)))
+              (lambda (&rest arguments) (declare (ignore arguments)) nil)))
           (nerimux/vcs::%read-worktree-status-at path nil path)
           (expect (= 0 numstat-calls))))
       (let ((path (namestring (host-kit:temporary-directory))))
         (with-stubbed-fdefinition
             ((nerimux/vcs::%git-status-snapshot
-               (lambda (&rest arguments)
-                 (declare (ignore arguments))
-                 (vcs-kit::%make-vcs-status-snapshot
-                  :branch-head "wt-head" :ahead 0 :behind 0
-                  :entries
-                  (list (vcs-kit::%make-vcs-status-entry
-                         :kind :ordinary :index-status " " :worktree-status "M"
-                         :path "foo.lisp")))))
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (vcs-kit::%make-vcs-status-snapshot
+                 :branch-head "wt-head" :ahead 0 :behind 0
+                 :entries
+                 (list (vcs-kit::%make-vcs-status-entry
+                        :kind :ordinary :index-status " " :worktree-status "M"
+                        :path "foo.lisp")))))
              (nerimux/vcs::%git-numstat-entries
-               (lambda (&rest arguments)
-                 (declare (ignore arguments))
-                 (incf numstat-calls)
-                 (list (vcs-kit::%make-numstat-entry
-                        :additions 1 :deletions 1 :path "foo.lisp"))))
+              (lambda (&rest arguments)
+                (declare (ignore arguments))
+                (incf numstat-calls)
+                (list (vcs-kit::%make-numstat-entry
+                       :additions 1 :deletions 1 :path "foo.lisp"))))
              (nerimux/vcs::%git-stash-entries
-               (lambda (&rest arguments) (declare (ignore arguments)) nil)))
+              (lambda (&rest arguments) (declare (ignore arguments)) nil)))
           (nerimux/vcs::%read-worktree-status-at path nil path)
           (expect (= 1 numstat-calls)))))))
 
@@ -562,4 +637,139 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
       (expect (= 1 (length (nerimux/vcs::%worktree-status-update-changed-files update))))
       (expect (= 1 (nerimux/vcs::%worktree-status-update-additions update)))
       (expect (= 0 (nerimux/vcs::%worktree-status-update-deletions update))))))
+(describe "vcs numstat literal pathspec"
+  (it "passes raw changed paths after the separator with literal pathspec magic"
+    (let ((command-arguments nil)
+          (paths (list "- leading [glob]*? (x):.txt" "space name.txt")))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%run-git-read
+            (lambda (directory subcommand &rest arguments)
+              (declare (ignore directory))
+              (setf command-arguments (cons subcommand arguments))
+              nil))
+           (vcs-kit:parse-numstat
+            (lambda (output)
+              (declare (ignore output))
+              nil)))
+        (nerimux/vcs::%git-numstat-entries "/fixture" paths))
+      (expect
+       (equal
+        (list "diff" "--numstat" "-z" "--"
+              ":(literal)- leading [glob]*? (x):.txt"
+              ":(literal)space name.txt")
+        command-arguments)))))
+(describe "vcs numstat path selection line-count equivalence"
+  (it "matches full numstat for renames, conflicts, binary, and special paths"
+    (let* ((directory (%run-git-read-test-repo))
+           (special-name "- spaced (x).txt")
+           (captured-paths nil)
+           (selected-additions nil)
+           (selected-deletions nil)
+           (original-numstat
+             (fdefinition (find-symbol "%GIT-NUMSTAT-ENTRIES" :nerimux/vcs))))
+      (flet ((write-file (name content)
+               (with-open-file (stream (format nil "~A~A" directory name)
+                                       :direction :output
+                                       :if-exists :supersede
+                                       :if-does-not-exist :create)
+                 (write-string content stream))))
+        (uiop:run-program
+         (list "git" "-C" directory "config" "user.name" "Fixture")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "config" "user.email" "fixture@example.invalid")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "config" "commit.gpgsign" "false")
+         :output :string :error-output :string)
+        (write-file "rename-old.txt" (format nil "rename base~%"))
+        (write-file "conflict.txt" (format nil "conflict base~%"))
+        (write-file "binary.bin" (format nil "binary base~Ctail" (code-char 0)))
+        (write-file special-name (format nil "special base~%"))
+        (uiop:run-program
+         (list "git" "-C" directory "add" "-A")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "commit" "-m" "fixture")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "branch" "side")
+         :output :string :error-output :string)
+        (write-file "conflict.txt" (format nil "main conflict~%"))
+        (uiop:run-program
+         (list "git" "-C" directory "add" "conflict.txt")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "commit" "-m" "main change")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "checkout" "side")
+         :output :string :error-output :string)
+        (write-file "conflict.txt" (format nil "side conflict~%"))
+        (uiop:run-program
+         (list "git" "-C" directory "add" "conflict.txt")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "commit" "-m" "side change")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "checkout" "main")
+         :output :string :error-output :string)
+        (uiop:run-program
+         (list "git" "-C" directory "merge" "side")
+         :output :string :error-output :string :ignore-error-status t)
+        (uiop:run-program
+         (list "git" "-C" directory "mv" "rename-old.txt" "rename-new.txt")
+         :output :string :error-output :string)
+        (write-file "rename-new.txt" (format nil "rename changed~%"))
+        (write-file "binary.bin" (format nil "binary changed~Ctail" (code-char 0)))
+        (write-file special-name (format nil "special changed~%")))
+      (let* ((snapshot (nerimux/vcs::%git-status-snapshot directory))
+             (entries (vcs-kit:vcs-status-snapshot-entries snapshot)))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs::%git-numstat-entries
+              (lambda (received-directory &optional paths)
+                (setf captured-paths paths)
+                (funcall original-numstat received-directory paths))))
+          (multiple-value-setq (selected-additions selected-deletions)
+            (nerimux/vcs::%worktree-status-diff-line-counts directory entries)))
+        (multiple-value-bind (full-additions full-deletions)
+            (nerimux/vcs::%worktree-status-diff-line-counts directory)
+          (expect
+           (some (lambda (entry)
+                   (eq :unmerged (vcs-kit:vcs-status-entry-kind entry)))
+                 entries))
+          (expect
+           (some (lambda (entry)
+                   (eq :rename-or-copy (vcs-kit:vcs-status-entry-kind entry)))
+                 entries))
+          (expect (member "conflict.txt" captured-paths :test (function string=)))
+          (expect (member "rename-new.txt" captured-paths :test (function string=)))
+          (expect (member "rename-old.txt" captured-paths :test (function string=)))
+          (expect (member "binary.bin" captured-paths :test (function string=)))
+          (expect (member special-name captured-paths :test (function string=)))
+          (expect (= 5 (length captured-paths)))
+          (expect (= full-additions selected-additions))
+          (expect (= full-deletions selected-deletions)))
+        (let ((binary-entry
+                (first (nerimux/vcs::%git-numstat-entries directory (list "binary.bin"))))
+              (rename-entries
+                (nerimux/vcs::%git-numstat-entries
+                 directory (list "rename-new.txt" "rename-old.txt")))
+              (special-entry
+                (first (nerimux/vcs::%git-numstat-entries directory (list special-name))))
+              (conflict-entries
+                (nerimux/vcs::%git-numstat-entries directory (list "conflict.txt"))))
+          (expect binary-entry)
+          (expect (null (vcs-kit:numstat-entry-additions binary-entry)))
+          (expect (null (vcs-kit:numstat-entry-deletions binary-entry)))
+          (expect (= 1 (length rename-entries)))
+          (expect (= 1
+                     (vcs-kit:numstat-entry-additions (first rename-entries))))
+          (expect (= 1
+                     (vcs-kit:numstat-entry-deletions (first rename-entries))))
+          (expect special-entry)
+          (expect (= 1 (vcs-kit:numstat-entry-additions special-entry)))
+          (expect (= 1 (vcs-kit:numstat-entry-deletions special-entry)))
+          (expect conflict-entries))))))
 
