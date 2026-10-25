@@ -341,7 +341,13 @@
                 (push arguments calls)
                 (error "fetch boundary reached"))))
             (ignore-errors (nerimux/vcs::fetch-repository repository)))
-           (expect (equal '(nil) calls)))))))
+           (expect
+            (equal
+             (list
+              (list :execution-options
+                    (list :environment-update
+                          nerimux/vcs::*worktree-test-environment-update*)))
+             calls)))))))
   (it "keeps plain fetch for nonbare, multiple, renamed, and absent remotes"
     (dolist (mode '(:nonbare :multiple :renamed :absent))
       (%call-with-worktree-path-repository
@@ -365,7 +371,13 @@
                 (push arguments calls)
                 (error "fetch boundary reached"))))
             (ignore-errors (nerimux/vcs::fetch-repository repository)))
-           (expect (equal '(nil) calls)))))))
+           (expect
+            (equal
+             (list
+              (list :execution-options
+                    (list :environment-update
+                          nerimux/vcs::*worktree-test-environment-update*)))
+             calls)))))))
   (it "preserves a direct origin HEAD ref"
     (%call-with-worktree-path-repository
      (lambda (repository root)
@@ -424,6 +436,7 @@
   (lock (sb-thread:make-mutex))
   (entered (make-hash-table :test #'eq))
   (resume (make-hash-table :test #'eq))
+  (workers (make-hash-table :test #'eq))
   (io-threads nil))
 
 (defun %job-fetch-drain (fixture)
@@ -501,6 +514,9 @@
          t))
       (nerimux/vcs::%read-repository-status
        (lambda (repository)
+         (sb-thread:with-mutex ((%job-fetch-fixture-lock fixture))
+           (setf (gethash repository (%job-fetch-fixture-workers fixture))
+                 sb-thread:*current-thread*))
          (sb-thread:signal-semaphore
           (gethash repository (%job-fetch-fixture-entered fixture)))
          (sb-thread:wait-on-semaphore
@@ -603,14 +619,22 @@
                                              (expect (typep condition 'error))
                                              (push repo errors))
                            :on-complete (lambda (result) (push result results)))))
-             (dolist (repo repos) (%job-fetch-await f repo))
+             (dolist (repo repos)
+               (%job-fetch-await f repo)
+               (expect
+                (member
+                 (gethash repo (%job-fetch-fixture-workers f))
+                 threads)))
              (%job-fetch-release f failed)
              (%join-test-worker
-              (first threads)
+              (gethash failed (%job-fetch-fixture-workers f))
               (format nil
                       "workspace-job-fetch worker for repository ~A"
                       (nerimux/workspace-model:repository-specification failed)))
-             (expect (not (sb-thread:thread-alive-p (first threads))))
+             (expect
+              (not
+               (sb-thread:thread-alive-p
+                (gethash failed (%job-fetch-fixture-workers f)))))
              (%job-fetch-drain f)
              (expect (equal (list failed) errors))
              (expect (null results))
