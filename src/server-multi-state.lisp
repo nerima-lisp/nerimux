@@ -37,9 +37,6 @@
 (defvar *workspace-operation-jobs* (make-hash-table :test #'equal))
 (defvar *workspace-job-spinner-tick* 0)
 
-(defvar *workspace-worktree-last-pane*
-  (make-hash-table :test #'equal))
-
 (defvar *workspace-catalog-loaded-p*
   nil)
 

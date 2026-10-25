@@ -201,3 +201,6 @@
 (defvar *client-wire-key-p* nil)
 (defparameter +keyboard-owning-modals+
   '(:confirm :help :process-log :transient :read-view :read-search :text-prompt))
+
+(defvar *workspace-worktree-last-pane*
+  (make-hash-table :test #'equal))
