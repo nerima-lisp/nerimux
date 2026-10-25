@@ -757,9 +757,7 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
                 (nerimux/vcs::%git-numstat-entries
                  directory (list "rename-new.txt" "rename-old.txt")))
               (special-entry
-                (first (nerimux/vcs::%git-numstat-entries directory (list special-name))))
-              (conflict-entries
-                (nerimux/vcs::%git-numstat-entries directory (list "conflict.txt"))))
+                (first (nerimux/vcs::%git-numstat-entries directory (list special-name)))))
           (expect binary-entry)
           (expect (null (vcs-kit:numstat-entry-additions binary-entry)))
           (expect (null (vcs-kit:numstat-entry-deletions binary-entry)))
