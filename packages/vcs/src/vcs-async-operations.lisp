@@ -46,6 +46,11 @@
   "Status reads allowed to run at once.  Each one forks several `git`
    processes, so a worker per repository exhausts the process file-descriptor
    limit on a ghq root holding hundreds of repositories.")
+(defun %emit-vcs-diagnostic (logger level message fields)
+  "Prevent a diagnostic sink failure from stopping request settlement."
+  (handler-case
+      (log-kit:emit-log logger level message fields)
+    (error () nil)))
 
 (defun %begin-repository-status-generation (repository)
   (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
@@ -171,7 +176,7 @@
 
 (defparameter *workspace-worktree-status-worker-limit*
   64
-  "Per-refresh thread count. The process-wide semaphore is initialized with this capacity once; changing this value later affects per-refresh pool sizes only. Restart to change the process-wide cap.")
+  "Worker threads created for each refresh. A process-wide semaphore limits simultaneous status readers to the capacity set when the process first creates it. Changing this value later changes per-refresh pool sizes only; restart to change that capacity.")
 (defvar *workspace-worktree-status-reader-semaphore*
   (sb-thread:make-semaphore :count *workspace-worktree-status-worker-limit*))
 (defconstant +repository-worktree-status-worker-limit+
@@ -277,9 +282,15 @@
                                    +repository-worktree-status-worker-limit+)
                                 (< (%workspace-status-request-next-index request)
                                    (length (%workspace-status-request-worktrees request))))
+                       ;; Keep the queue and semaphore count in sync if publishing fails.
                        (setf (%workspace-status-request-ready-queued-p request) t)
                        (push request ready-back)
-                       (sb-thread:signal-semaphore status-available)))
+                       (handler-case
+                           (sb-thread:signal-semaphore status-available)
+                         (error (condition)
+                           (pop ready-back)
+                           (setf (%workspace-status-request-ready-queued-p request) nil)
+                           (error condition)))))
                    (request-condition (request)
                      (or (%workspace-status-request-preparation-condition request)
                          (loop for index below
@@ -440,22 +451,24 @@
                                          (mark-request-ready request stashes condition))
                                      (error (caught)
                                        (unwind-protect
-                                            (log-kit:emit-log
-                                             *vcs-diagnostic-logger* log-kit:+level-warn+
-                                             (format nil "Workspace status preparation failed for ~A"
-                                                     (%workspace-status-request-repository request))
+                                            (%emit-vcs-diagnostic
+                                             *vcs-diagnostic-logger*
+                                             log-kit:+level-warn+
+                                             "Workspace status preparation failed"
                                              (list :repository
-                                                   (%workspace-status-request-repository request)
+                                                   (nerimux/workspace-model:repository-specification
+                                                     (%workspace-status-request-repository request))
                                                    :condition (princ-to-string caught)))
                                          (fail-preparation-request request caught)))
                                  (error (settlement-error)
                                    (unwind-protect
-                                        (log-kit:emit-log
-                                         *vcs-diagnostic-logger* log-kit:+level-warn+
-                                         (format nil "Workspace status settlement failed for ~A"
-                                                 (%workspace-status-request-repository request))
+                                        (%emit-vcs-diagnostic
+                                         *vcs-diagnostic-logger*
+                                         log-kit:+level-warn+
+                                         "Workspace status settlement failed"
                                          (list :repository
-                                               (%workspace-status-request-repository request)
+                                               (nerimux/workspace-model:repository-specification
+                                                 (%workspace-status-request-repository request))
                                                :condition (princ-to-string settlement-error)))
                                      (fail-preparation-request request settlement-error))))))
                     )
