@@ -961,4 +961,47 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
       (expect (and logged-message (search "numstat" (string-downcase logged-message))))
       (expect (= 0 additions))
       (expect (= 0 deletions)))))
+(describe "vcs numstat fallback diagnostic logging"
+  (it "records one non-TUI log entry for each unfiltered fallback"
+    (let* ((commands nil)
+           (log-output
+             (with-output-to-string (stream)
+               (let ((nerimux/vcs::*vcs-diagnostic-logger*
+                       (log-kit:make-logger
+                        :name "nerimux/vcs-test"
+                        :handler (make-instance 'log-kit:text-handler :stream stream)
+                        :level log-kit:+level-info+)))
+                 (with-stubbed-fdefinition
+                     ((nerimux/vcs::%run-git-read
+                       (lambda (directory subcommand &rest arguments)
+                         (declare (ignore directory))
+                         (push (cons subcommand arguments) commands)
+                         "")))
+                   (nerimux/vcs::%git-numstat-entries
+                    "/fixture" (list "bad?path"))
+                   (nerimux/vcs::%git-numstat-entries
+                    "/fixture"
+                    (make-list 535
+                               :initial-element
+                               (make-string 240 :initial-element #\p))))))))
+      (let* ((replacement-message
+               "using unfiltered diff for numstat because a decoded path may contain the UTF-8 replacement marker")
+             (limit-message
+               "using unfiltered diff for numstat because the pathspec argv exceeds its byte limit")
+             (replacement-position (search replacement-message log-output))
+             (limit-position (search limit-message log-output)))
+        (expect (and replacement-position
+                     (null (search replacement-message
+                                   log-output
+                                   :start2 (1+ replacement-position))))
+                "Replacement-marker fallback should be logged once.")
+        (expect (and limit-position
+                     (null (search limit-message
+                                   log-output
+                                   :start2 (1+ limit-position))))
+                "Oversized-pathspec fallback should be logged once.")
+        (expect (equal '(("diff" "--numstat" "-z")
+                         ("diff" "--numstat" "-z"))
+                       (reverse commands))
+                "Each fallback should use the unfiltered numstat command.")))))
 

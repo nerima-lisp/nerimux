@@ -1840,3 +1840,78 @@
 
 
 )
+
+(describe "workspace status queue dynamic catalog bindings"
+  (it "checks shared generations on workers before applying in caller bindings"
+    (let* ((repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/dynamic-catalog"
+              :local-path "/tmp/dynamic-catalog"))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :repository repository :path "/tmp/dynamic-catalog/main"))
+           (organization
+             (nerimux/workspace-model:make-organization
+              :host "workspace-owner" :name "dynamic-catalog"
+              :repositories (list repository)))
+           (callback-lock
+             (cl-concurrent-kit:make-lock :name "dynamic catalog callback queue"))
+           (callbacks nil)
+           (completed-event (sb-thread:make-semaphore :count 0))
+           (read-count 0)
+           (applied-updates nil)
+           (completed-p nil)
+           (threads nil))
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (labels ((enqueue-callback (callback)
+                 (cl-concurrent-kit:with-lock-held (callback-lock)
+                   (setf callbacks (nconc callbacks (list callback)))))
+               (take-callback ()
+                 (cl-concurrent-kit:with-lock-held (callback-lock)
+                   (pop callbacks)))
+               (drain-callbacks ()
+                 (loop for callback = (take-callback)
+                       while callback
+                       do (funcall callback))))
+        (let ((nerimux/vcs::*workspace-organizations* nil))
+          (nerimux/vcs::set-workspace-organizations (list organization))
+          (with-stubbed-fdefinition
+              ((nerimux/vcs::%repository-status-shared-stashes
+                 (lambda (current)
+                   (declare (ignore current))
+                   nil))
+               (nerimux/vcs::%read-worktree-status
+                 (lambda (current &key stashes)
+                   (declare (ignore current stashes))
+                   (incf read-count)
+                   :status)))
+            (unwind-protect
+                 (progn
+                   (setf threads
+                         (nerimux/vcs:refresh-workspace-status-async
+                          :organizations (list organization)
+                          :callback-dispatch #'enqueue-callback
+                          :status-applier
+                          (lambda (current updates)
+                            (declare (ignore current))
+                            (setf applied-updates updates))
+                          :on-complete
+                          (lambda (completed)
+                            (declare (ignore completed))
+                            (sb-thread:signal-semaphore completed-event))))
+                   (loop repeat 500
+                         until completed-p
+                         do (drain-callbacks)
+                            (setf completed-p
+                                  (sb-thread:wait-on-semaphore
+                                   completed-event :timeout 0.01)))
+                   (expect completed-p)
+                   (dolist (thread threads)
+                     (cl-concurrent-kit:join-thread thread :timeout 10))
+                   (setf threads nil))
+              (progn
+                (drain-callbacks)
+                (dolist (thread threads)
+                  (cl-concurrent-kit:join-thread thread :timeout 10)))))
+          (expect (= 1 read-count))
+          (expect (equal (list :status) applied-updates)))))))

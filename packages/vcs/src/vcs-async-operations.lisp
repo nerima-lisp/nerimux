@@ -171,8 +171,8 @@
 
 (defparameter *workspace-worktree-status-worker-limit*
   64
-  "Maximum concurrent worktree status readers across all workspace refreshes.")
-(defparameter *workspace-worktree-status-reader-semaphore*
+  "Maximum concurrent worktree status readers per refresh. The semaphore uses this value when first initialized; SETF later changes per-refresh thread count only, not the process-wide cap. Changing the cap requires a process restart.")
+(defvar *workspace-worktree-status-reader-semaphore*
   (sb-thread:make-semaphore :count *workspace-worktree-status-worker-limit*))
 (defconstant +repository-worktree-status-worker-limit+
   4
@@ -197,9 +197,17 @@
   (next-index 0)
   (active 0)
   (failed-p nil)
+  (stale-p nil)
   (prepared-p nil)
   (ready-queued-p nil)
-  (settled-p nil))
+  (settled-p nil)
+  (workers-settled-p nil))
+
+;; Worker threads do not inherit dynamic catalog bindings from the caller.
+(defun %repository-data-generation-worker-current-p (repository generation)
+  (and (eq generation (gethash repository *repository-data-generations*))
+       (eq *workspace-catalog-generation*
+           (%repository-data-generation-catalog-generation generation))))
 
 (defun %refresh-repositories-with-worktree-queue (repositories &key
                                                                on-start
@@ -223,7 +231,7 @@
                (ready-front nil)
                (ready-back nil)
                (status-workers-stopping-p nil)
-               (worktree-count 0)
+               (worktree-count 0) (pending-worker-requests (length repositories))
                (requests
                  (loop for repository in repositories
                        collect
@@ -256,12 +264,14 @@
                      (and (%workspace-status-request-prepared-p request)
                           (zerop (%workspace-status-request-active request))
                           (or (%workspace-status-request-failed-p request)
+                              (%workspace-status-request-stale-p request)
                               (= (%workspace-status-request-next-index request)
                                  (length (%workspace-status-request-worktrees request))))
                           (not (%workspace-status-request-settled-p request))))
                    (queue-ready-request-under-lock (request)
                      (when (and (%workspace-status-request-prepared-p request)
                                 (not (%workspace-status-request-failed-p request))
+                                (not (%workspace-status-request-stale-p request))
                                 (not (%workspace-status-request-ready-queued-p request))
                                 (< (%workspace-status-request-active request)
                                    +repository-worktree-status-worker-limit+)
@@ -290,19 +300,9 @@
                            (declare (ignore index))
                            (sb-thread:signal-semaphore status-available)))))
                    (maybe-stop-status-workers ()
-                     (when
-                         (sb-thread:with-recursive-lock
-                             (*workspace-catalog-generation-lock*)
-                           (cl-concurrent-kit:with-lock-held (queue-lock)
-                             (every
-                              (lambda (request)
-                                (and (%workspace-status-request-prepared-p request)
-                                     (zerop (%workspace-status-request-active request))
-                                     (or (%workspace-status-request-failed-p request)
-                                         (= (%workspace-status-request-next-index request)
-                                            (length
-                                             (%workspace-status-request-worktrees request))))))
-                              requests)))
+                     (when (cl-concurrent-kit:with-lock-held (queue-lock)
+                             (and (zerop pending-worker-requests)
+                                  (not status-workers-stopping-p)))
                        (stop-status-workers)))
                    (complete-one (repository entry)
                      (let ((complete-p
@@ -315,10 +315,8 @@
                                  (remhash repository
                                           *repository-status-generations*))
                                (zerop (decf remaining)))))
-                       (when complete-p
-                         (stop-status-workers)
-                         (when on-complete
-                           (funcall on-complete repositories)))))
+                       (when (and complete-p on-complete)
+                         (funcall on-complete repositories))))
                    (fail-one (repository entry condition)
                      (unwind-protect
                           (if on-error
@@ -345,41 +343,49 @@
                            (fail-one repository entry condition)
                            (complete-one repository entry))))
                    (settle-request (request)
-                     (let* ((repository
-                              (%workspace-status-request-repository request))
-                            (entry (%workspace-status-request-entry request))
-                            (condition (request-condition request))
-                            (dispatch-state :pending)
-                            (callback (if condition #'fail-one #'apply-one))
-                            (arguments
-                              (if condition
-                                  (list repository entry condition)
-                                  (list repository
-                                        entry
-                                        (%workspace-status-request-token request)
-                                        (coerce
-                                         (%workspace-status-request-updates request)
-                                         'list)))))
-                       (handler-case
-                           (%dispatch-callback
-                            callback-dispatch
-                            (lambda ()
-                              (let ((run-p nil))
-                                (cl-concurrent-kit:with-lock-held (queue-lock)
-                                  (when (eq dispatch-state :pending)
-                                    (setf dispatch-state :running
-                                          run-p t)))
-                                (when run-p
-                                  (apply callback arguments)))))
-                         (error (caught)
-                           (let ((fallback-p nil))
-                             (cl-concurrent-kit:with-lock-held (queue-lock)
-                               (when (eq dispatch-state :pending)
-                                 (setf dispatch-state :fallback
-                                       fallback-p t)))
-                             (if fallback-p
-                                 (fail-one repository entry caught)
-                                 (error caught)))))))
+                     (let ((worker-settlement-p nil))
+                       (cl-concurrent-kit:with-lock-held (queue-lock)
+                         (unless (%workspace-status-request-workers-settled-p request)
+                           (setf (%workspace-status-request-workers-settled-p request) t
+                                 worker-settlement-p t)
+                           (decf pending-worker-requests)))
+                       (when worker-settlement-p
+                         (maybe-stop-status-workers))
+                       (let* ((repository
+                                (%workspace-status-request-repository request))
+                              (entry (%workspace-status-request-entry request))
+                              (condition (request-condition request))
+                              (dispatch-state :pending)
+                              (callback (if condition #'fail-one #'apply-one))
+                              (arguments
+                                (if condition
+                                    (list repository entry condition)
+                                    (list repository
+                                          entry
+                                          (%workspace-status-request-token request)
+                                          (coerce
+                                           (%workspace-status-request-updates request)
+                                           'list)))))
+                         (handler-case
+                             (%dispatch-callback
+                              callback-dispatch
+                              (lambda ()
+                                (let ((run-p nil))
+                                  (cl-concurrent-kit:with-lock-held (queue-lock)
+                                    (when (eq dispatch-state :pending)
+                                      (setf dispatch-state :running
+                                            run-p t)))
+                                  (when run-p
+                                    (apply callback arguments)))))
+                           (error (caught)
+                             (let ((fallback-p nil))
+                               (cl-concurrent-kit:with-lock-held (queue-lock)
+                                 (when (eq dispatch-state :pending)
+                                   (setf dispatch-state :fallback
+                                         fallback-p t)))
+                               (if fallback-p
+                                   (fail-one repository entry caught)
+                                   (error caught))))))))
                    (mark-request-ready (request stashes condition)
                      (let ((settle-p nil))
                        (cl-concurrent-kit:with-lock-held (queue-lock)
@@ -403,160 +409,153 @@
                    (prepare-repositories ()
                      (loop for request = (next-preparation-request)
                            while request
-                           do (let ((stashes nil)
-                                    (condition nil))
-                                (handler-case
-                                    (progn
-                                      (%dispatch-callback
-                                       callback-dispatch
-                                       on-start
-                                       (%workspace-status-request-repository request))
-                                      (setf stashes
-                                            (%repository-status-shared-stashes
-                                             (%workspace-status-request-repository
-                                              request))))
-                                  (error (caught)
-                                    (setf condition caught)))
-                                (handler-case
-                                    (mark-request-ready request stashes condition)
-                                  (error (caught)
-                                    (let ((settle-p nil))
-                                      (cl-concurrent-kit:with-lock-held (queue-lock)
-                                        (unless
-                                            (%workspace-status-request-settled-p request)
-                                          (setf
-                                           (%workspace-status-request-stashes request) nil
-                                           (%workspace-status-request-prepared-p request) t
-                                           (%workspace-status-request-failed-p request) t
-                                           (%workspace-status-request-preparation-condition
-                                            request)
-                                           caught)
-                                          (when (request-ready-to-settle-p request)
-                                            (setf
-                                             (%workspace-status-request-settled-p request) t
-                                             settle-p t))))
-                                      (maybe-stop-status-workers)
-                                      (when settle-p
+                           do (handler-case
+                                  (handler-case
+                                      (let ((stashes nil)
+                                            (condition nil))
                                         (handler-case
-                                            (settle-request request)
-                                          (error () nil)))))))))
+                                            (progn
+                                              (%dispatch-callback
+                                               callback-dispatch
+                                               on-start
+                                               (%workspace-status-request-repository
+                                                request))
+                                              (setf stashes
+                                                    (%repository-status-shared-stashes
+                                                     (%workspace-status-request-repository
+                                                      request))))
+                                          (error (caught)
+                                            (setf condition caught)))
+                                        (mark-request-ready request stashes condition))
+                                    (error (caught)
+                                      (warn "Workspace status preparation failed for ~A: ~A"
+                                            (%workspace-status-request-repository request)
+                                            caught)
+                                      (let ((settle-p nil))
+                                        (cl-concurrent-kit:with-lock-held (queue-lock)
+                                          (unless
+                                              (%workspace-status-request-settled-p request)
+                                            (setf
+                                             (%workspace-status-request-stashes request) nil
+                                             (%workspace-status-request-prepared-p request) t
+                                             (%workspace-status-request-failed-p request) t
+                                             (%workspace-status-request-preparation-condition
+                                              request)
+                                             caught)
+                                            (when (request-ready-to-settle-p request)
+                                              (setf
+                                               (%workspace-status-request-settled-p request) t
+                                               settle-p t))))
+                                        (maybe-stop-status-workers)
+                                        (when settle-p
+                                          (settle-request request))))
+                                (error (settlement-error)
+                                  (warn "Workspace status settlement failed for ~A: ~A"
+                                        (%workspace-status-request-repository request)
+                                        settlement-error))))))
                    (next-worktree-request ()
                      (sb-thread:wait-on-semaphore status-available)
                      (let ((work nil)
-                           (request-to-settle nil))
-                       (sb-thread:with-recursive-lock
-                           (*workspace-catalog-generation-lock*)
-                         (cl-concurrent-kit:with-lock-held (queue-lock)
-                           (unless status-workers-stopping-p
+                           (request-to-settle nil)
+                           (stop-p nil))
+                       (cl-concurrent-kit:with-lock-held (queue-lock)
+                         (if status-workers-stopping-p
+                             (setf stop-p t)
                              (let ((request (pop-ready-under-lock)))
                                (when request
                                  (setf (%workspace-status-request-ready-queued-p request)
                                        nil)
-                                 (if (%repository-data-generation-current-p
-                                      (%workspace-status-request-repository request)
-                                      (%workspace-status-request-token request))
-                                     (when (and
-                                            (not
-                                             (%workspace-status-request-failed-p request))
-                                            (< (%workspace-status-request-active request)
-                                               +repository-worktree-status-worker-limit+)
-                                            (< (%workspace-status-request-next-index request)
-                                               (length
-                                                (%workspace-status-request-worktrees
-                                                 request))))
-                                       (let* ((index
-                                                (%workspace-status-request-next-index
-                                                 request))
-                                              (worktree
-                                                (aref
-                                                 (%workspace-status-request-worktrees
-                                                  request)
-                                                 index)))
-                                         (incf
-                                          (%workspace-status-request-next-index request))
-                                         (incf (%workspace-status-request-active request))
-                                         (setf
-                                          (aref
-                                           (%workspace-status-request-active-readers request)
-                                           index)
-                                          t)
-                                         (queue-ready-request-under-lock request)
-                                         (setf work (list request index worktree))))
-                                     (progn
+                                 (unless (or
+                                          (%workspace-status-request-failed-p request)
+                                          (%workspace-status-request-stale-p request))
+                                   (when (and
+                                          (< (%workspace-status-request-active request)
+                                             +repository-worktree-status-worker-limit+)
+                                          (< (%workspace-status-request-next-index request)
+                                             (length
+                                              (%workspace-status-request-worktrees
+                                               request))))
+                                     (let* ((index
+                                              (%workspace-status-request-next-index request))
+                                            (worktree
+                                              (aref
+                                               (%workspace-status-request-worktrees request)
+                                               index)))
+                                       (incf (%workspace-status-request-next-index request))
+                                       (incf (%workspace-status-request-active request))
                                        (setf
-                                        (%workspace-status-request-next-index request)
-                                        (length
-                                         (%workspace-status-request-worktrees request)))
-                                       (when (request-ready-to-settle-p request)
-                                         (setf
-                                          (%workspace-status-request-settled-p request) t
-                                          request-to-settle request)))))))))
-                       (maybe-stop-status-workers)
+                                        (aref
+                                         (%workspace-status-request-active-readers request)
+                                         index)
+                                        t)
+                                       (queue-ready-request-under-lock request)
+                                       (setf work (list request index worktree)))))
+                                 (when (request-ready-to-settle-p request)
+                                   (setf (%workspace-status-request-settled-p request) t
+                                         request-to-settle request))))))
                        (when request-to-settle
                          (settle-request request-to-settle))
-                       (or work
-                           (when status-workers-stopping-p :stop))))
+                       (maybe-stop-status-workers)
+                       (or work (when stop-p :stop))))
                    (finish-worktree-request (request index update condition)
                      (let ((settle-p nil)
                            (handled-p nil))
-                       (sb-thread:with-recursive-lock
-                           (*workspace-catalog-generation-lock*)
-                         (cl-concurrent-kit:with-lock-held (queue-lock)
-                           (unless
-                               (%repository-data-generation-current-p
-                                (%workspace-status-request-repository request)
-                                (%workspace-status-request-token request))
-                             (setf
-                              (%workspace-status-request-next-index request)
-                              (length
-                               (%workspace-status-request-worktrees request))))
-                           (when
-                               (aref
-                                (%workspace-status-request-active-readers request)
-                                index)
-                             (setf handled-p t
-                                   (aref
-                                    (%workspace-status-request-active-readers request)
-                                    index)
-                                   nil)
-                             (if condition
-                                 (setf
-                                  (aref
-                                   (%workspace-status-request-failures request)
-                                   index)
-                                  condition
-                                  (%workspace-status-request-failed-p request)
-                                  t)
-                                 (setf
-                                  (aref
-                                   (%workspace-status-request-updates request)
-                                   index)
-                                  update))
-                             (decf (%workspace-status-request-active request))
-                             (queue-ready-request-under-lock request)
-                             (when (request-ready-to-settle-p request)
-                               (setf (%workspace-status-request-settled-p request) t
-                                     settle-p t)))))
-                       (maybe-stop-status-workers)
+                       (cl-concurrent-kit:with-lock-held (queue-lock)
+                         (when
+                             (aref
+                              (%workspace-status-request-active-readers request)
+                              index)
+                           (setf handled-p t
+                                 (aref
+                                  (%workspace-status-request-active-readers request)
+                                  index)
+                                 nil)
+                           (if condition
+                               (setf
+                                (aref (%workspace-status-request-failures request) index)
+                                condition
+                                (%workspace-status-request-failed-p request)
+                                t)
+                               (setf
+                                (aref (%workspace-status-request-updates request) index)
+                                update))
+                           (decf (%workspace-status-request-active request))
+                           (queue-ready-request-under-lock request)
+                           (when (request-ready-to-settle-p request)
+                             (setf (%workspace-status-request-settled-p request) t
+                                   settle-p t))))
                        (when settle-p
                          (settle-request request))
+                       (maybe-stop-status-workers)
                        handled-p))
                    (read-worktree-request (request index worktree)
-                     (let ((stashes
+                     (let ((reader-semaphore
+                             *workspace-worktree-status-reader-semaphore*)
+                           (stashes
                              (%workspace-status-request-stashes request))
                            (update nil)
                            (condition nil))
                        (handler-case
                            (progn
-                             (sb-thread:wait-on-semaphore
-                              *workspace-worktree-status-reader-semaphore*)
+                             (sb-thread:wait-on-semaphore reader-semaphore)
                              (unwind-protect
-                                 (setf update
-                                       (if stashes
-                                           (%read-worktree-status worktree :stashes stashes)
-                                           (%read-worktree-status worktree)))
-                               (sb-thread:signal-semaphore
-                                *workspace-worktree-status-reader-semaphore*)))
+                                 (if
+                                  (sb-thread:with-recursive-lock
+                                      (*workspace-catalog-generation-lock*)
+                                    (%repository-data-generation-worker-current-p
+                                     (%workspace-status-request-repository request)
+                                     (%workspace-status-request-token request)))
+                                  (setf update
+                                        (if stashes
+                                            (%read-worktree-status
+                                             worktree :stashes stashes)
+                                            (%read-worktree-status worktree)))
+                                  (cl-concurrent-kit:with-lock-held (queue-lock)
+                                    (setf (%workspace-status-request-stale-p request) t
+                                          (%workspace-status-request-next-index request)
+                                          (length
+                                           (%workspace-status-request-worktrees request)))))
+                               (sb-thread:signal-semaphore reader-semaphore)))
                          (error (caught)
                            (setf condition caught)))
                        (finish-worktree-request request index update condition)))

@@ -3,6 +3,12 @@
 (defvar *git-read-output-limit* (* 1024 1024)
   "Maximum stdout byte count captured by %RUN-GIT-READ. Output over this limit
 signals %GIT-READ-ERROR.")
+(defparameter *vcs-diagnostic-logger*
+  (log-kit:make-logger
+   :name "nerimux/vcs"
+   :handler (make-instance 'log-kit:text-handler :stream *error-output*)
+   :level log-kit:+level-info+)
+  "Structured logger for non-TUI VCS diagnostics.")
 (defconstant +numstat-pathspec-argv-byte-limit+ (* 128 1024)
   "Maximum UTF-8 bytes, including NUL terminators, passed in numstat pathspec arguments.")
 
@@ -110,9 +116,29 @@ handle."
                        (length
                         (sb-ext:string-to-octets
                          pathspec
-                         :external-format :utf-8))))))
-         (if (or (some (lambda (path) (find #\? path)) paths)
-                 (> pathspec-argv-bytes +numstat-pathspec-argv-byte-limit+))
+                         :external-format :utf-8)))))
+              (fallback-reason
+                (cond
+                  ((some (lambda (path) (find #\? path)) paths)
+                   :replacement-marker-in-decoded-path)
+                  ((> pathspec-argv-bytes +numstat-pathspec-argv-byte-limit+)
+                   :pathspec-argv-too-large))))
+         (when fallback-reason
+           (log-kit:emit-log
+            *vcs-diagnostic-logger*
+            log-kit:+level-warn+
+            (format nil
+                    "using unfiltered diff for numstat because ~A"
+                    (case fallback-reason
+                      (:replacement-marker-in-decoded-path
+                       "a decoded path may contain the UTF-8 replacement marker")
+                      (:pathspec-argv-too-large
+                       "the pathspec argv exceeds its byte limit")))
+            (list :reason fallback-reason
+                  :path-count (length paths)
+                  :pathspec-argv-bytes pathspec-argv-bytes
+                  :pathspec-argv-byte-limit +numstat-pathspec-argv-byte-limit+)))
+         (if fallback-reason
              (%run-git-read directory "diff" "--numstat" "-z")
              (apply (function %run-git-read) directory "diff" "--numstat" "-z" "--"
                     pathspecs)))
