@@ -276,7 +276,7 @@
                       (declare (ignore query on-start on-error on-progress callback-dispatch))
                       (funcall on-complete (list organization))
                       nil))
-                  (nerimux/vcs:refresh-repositories-async
+                  (nerimux/vcs::%refresh-repositories-with-worktree-queue
                     (lambda (repositories &key on-start on-repository on-complete on-error
                                status-reader status-applier callback-dispatch)
                       (declare (ignore on-start on-repository status-reader status-applier
