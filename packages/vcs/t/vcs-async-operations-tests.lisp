@@ -1915,3 +1915,306 @@
                   (cl-concurrent-kit:join-thread thread :timeout 10)))))
           (expect (= 1 read-count))
           (expect (equal (list :status) applied-updates)))))))
+(describe "workspace status queue process-wide reader limit"
+          (it "caps readers across overlapping refreshes"
+              (let* ((global-limit
+                      (sb-thread:semaphore-count
+                       nerimux/vcs::*workspace-worktree-status-reader-semaphore*))
+                     (repositories
+                      (loop for repository-index from 1 to 16
+                            collect (let ((repository
+                                           (nerimux/workspace-model:make-repository
+                                            :specification
+                                            (format nil
+                                                    "workspace-owner/global-limit-~D"
+                                                    repository-index)
+                                            :local-path
+                                            (format nil
+                                                    "/tmp/global-limit-~D"
+                                                    repository-index))))
+                                      (dotimes (worktree-index 8)
+                                        (nerimux/workspace-model:repository-add-worktree
+                                         repository
+                                         (nerimux/workspace-model:make-worktree
+                                          :repository
+                                          repository
+                                          :path
+                                          (format nil
+                                                  "/tmp/global-limit-~D/worktree-~D"
+                                                  repository-index
+                                                  worktree-index))))
+                                      repository)))
+                     (organization
+                      (nerimux/workspace-model:make-organization :host
+                                                                 "workspace-owner"
+                                                                 :name
+                                                                 "global-limit"
+                                                                 :repositories
+                                                                 repositories))
+                     (probe-lock
+                      (cl-concurrent-kit:make-lock :name
+                                                   "global reader limit probe"))
+                     (release-readers (sb-thread:make-semaphore :count 0))
+                     (at-limit (sb-thread:make-semaphore :count 0))
+                     (above-limit (sb-thread:make-semaphore :count 0))
+                     (second-preparation-ready
+                      (sb-thread:make-semaphore :count 0))
+                     (completed-events (sb-thread:make-semaphore :count 0))
+                     (second-started-repositories (make-hash-table :test #'eq))
+                     (second-preparation-count 0)
+                     (completed-count 0)
+                     (read-count 0)
+                     (in-flight 0)
+                     (peak 0)
+                     (first-threads nil)
+                     (second-threads nil))
+                (expect (> global-limit 0))
+                (with-stubbed-fdefinition
+                 ((nerimux/vcs::%repository-status-shared-stashes
+                   (lambda (repository)
+                     (when
+                         (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                           (when
+                                                               (gethash
+                                                                repository
+                                                                second-started-repositories)
+                                                             (= 16
+                                                                (incf
+                                                                 second-preparation-count))))
+                       (sb-thread:signal-semaphore second-preparation-ready))
+                     nil))
+                  (nerimux/vcs::%read-worktree-status
+                   (lambda (worktree &key stashes)
+                     (declare (ignore worktree stashes))
+                     (let ((active
+                            (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                              (incf read-count)
+                                                              (setf peak (max
+                                                                          peak
+                                                                          (incf
+                                                                           in-flight)))
+                                                              in-flight)))
+                       (when (= active global-limit)
+                         (sb-thread:signal-semaphore at-limit))
+                       (when (= active (1+ global-limit))
+                         (sb-thread:signal-semaphore above-limit))
+                       (unwind-protect
+                           (progn
+                             (unless
+                                 (sb-thread:wait-on-semaphore release-readers
+                                                              :timeout
+                                                              10)
+                               (error
+                                "The global-limit status reader was not released"))
+                             :status)
+                         (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                           (decf in-flight)))))))
+                 (unwind-protect
+                     (progn
+                       (setf first-threads (nerimux/vcs:refresh-workspace-status-async
+                                            :organizations
+                                            (list organization)
+                                            :callback-dispatch
+                                            (lambda (callback)
+                                              (funcall callback))
+                                            :status-applier
+                                            (lambda (repository updates)
+                                              (declare (ignore repository
+                                                               updates)))
+                                            :on-complete
+                                            (lambda (completed-organizations)
+                                              (expect
+                                               (equal (list organization)
+                                                      completed-organizations))
+                                              (cl-concurrent-kit:with-lock-held
+                                               (probe-lock)
+                                               (incf completed-count))
+                                              (sb-thread:signal-semaphore
+                                               completed-events))))
+                       (expect
+                        (= (+ (min global-limit 128) 4) (length first-threads)))
+                       (expect
+                        (sb-thread:wait-on-semaphore at-limit :timeout 10))
+                       (setf second-threads (nerimux/vcs:refresh-workspace-status-async
+                                             :organizations
+                                             (list organization)
+                                             :callback-dispatch
+                                             (lambda (callback)
+                                               (funcall callback))
+                                             :on-start
+                                             (lambda (repository)
+                                               (cl-concurrent-kit:with-lock-held
+                                                (probe-lock)
+                                                (setf (gethash repository
+                                                               second-started-repositories) t)))
+                                             :status-applier
+                                             (lambda (repository updates)
+                                               (declare (ignore repository
+                                                                updates)))
+                                             :on-complete
+                                             (lambda (completed-organizations)
+                                               (expect
+                                                (equal (list organization)
+                                                       completed-organizations))
+                                               (cl-concurrent-kit:with-lock-held
+                                                (probe-lock)
+                                                (incf completed-count))
+                                               (sb-thread:signal-semaphore
+                                                completed-events))))
+                       (expect
+                        (= (+ (min global-limit 128) 4) (length second-threads)))
+                       (expect
+                        (sb-thread:wait-on-semaphore second-preparation-ready
+                                                     :timeout
+                                                     10))
+                       (expect
+                        (not
+                         (sb-thread:wait-on-semaphore above-limit :timeout 1)))
+                       (dotimes (index (* 4 global-limit))
+                         (declare (ignore index))
+                         (sb-thread:signal-semaphore release-readers))
+                       (expect
+                        (sb-thread:wait-on-semaphore completed-events
+                                                     :timeout
+                                                     20))
+                       (expect
+                        (sb-thread:wait-on-semaphore completed-events
+                                                     :timeout
+                                                     20))
+                       (dolist (thread (append first-threads second-threads))
+                         (cl-concurrent-kit:join-thread thread :timeout 10))
+                       (expect
+                        (every
+                         (lambda (thread)
+                           (not (sb-thread:thread-alive-p thread)))
+                         (append first-threads second-threads)))
+                       (setf first-threads nil
+                             second-threads nil))
+                   (progn
+                     (dotimes (index (* 4 global-limit))
+                       (declare (ignore index))
+                       (sb-thread:signal-semaphore release-readers))
+                     (dolist (thread (append first-threads second-threads))
+                       (cl-concurrent-kit:join-thread thread :timeout 10))))
+                 (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                   (expect
+                                                    (<= peak global-limit))
+                                                   (expect
+                                                    (>= read-count
+                                                        (* 2 global-limit)))
+                                                   (expect (zerop in-flight))
+                                                   (expect
+                                                    (= 2 completed-count))))))
+          (it "settles a prepared request when its fallback diagnostics signal"
+              (let* ((repository
+                      (nerimux/workspace-model:make-repository :specification
+                                                               "workspace-owner/preparation-diagnostic-failure"
+                                                               :local-path
+                                                               "/tmp/preparation-diagnostic-failure"))
+                     (worktree
+                      (nerimux/workspace-model:make-worktree :repository
+                                                             repository
+                                                             :path
+                                                             "/tmp/preparation-diagnostic-failure/main"))
+                     (organization
+                      (nerimux/workspace-model:make-organization :host
+                                                                 "workspace-owner"
+                                                                 :name
+                                                                 "preparation-diagnostic-failure"
+                                                                 :repositories
+                                                                 (list
+                                                                  repository)))
+                     (probe-lock
+                      (cl-concurrent-kit:make-lock :name
+                                                   "preparation diagnostic probe"))
+                     (completed-event (sb-thread:make-semaphore :count 0))
+                     (real-signal-semaphore
+                      (symbol-function 'sb-thread:signal-semaphore))
+                     (signal-count 0)
+                     (diagnostic-count 0)
+                     (read-count 0)
+                     (error-count 0)
+                     (completion-count 0)
+                     (threads nil))
+                (nerimux/workspace-model:repository-add-worktree repository
+                                                                 worktree)
+                (with-stubbed-fdefinition
+                 ((nerimux/vcs::%repository-status-shared-stashes
+                   (lambda (current)
+                     (declare (ignore current))
+                     nil))
+                  (nerimux/vcs::%read-worktree-status
+                   (lambda (current &key stashes)
+                     (declare (ignore current stashes))
+                     (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                       (incf read-count))
+                     :unexpected))
+                  (sb-thread:signal-semaphore
+                   (lambda (semaphore &optional (count 1))
+                     (if (= 1
+                            (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                              (incf
+                                                               signal-count)))
+                         (error "Fixture queue signal failed")
+                         (funcall real-signal-semaphore semaphore count))))
+                  (log-kit:emit-log
+                   (lambda (logger level message fields)
+                     (declare (ignore logger level message fields))
+                     (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                       (incf diagnostic-count))
+                     (error "Fixture diagnostic logger failed"))))
+                 (unwind-protect
+                     (progn
+                       (setf threads (nerimux/vcs:refresh-workspace-status-async
+                                      :organizations
+                                      (list organization)
+                                      :callback-dispatch
+                                      (lambda (callback)
+                                        (funcall callback))
+                                      :status-applier
+                                      (lambda (current updates)
+                                        (declare (ignore current updates)))
+                                      :on-error
+                                      (lambda (current condition)
+                                        (declare (ignore current condition))
+                                        (cl-concurrent-kit:with-lock-held
+                                         (probe-lock)
+                                         (incf error-count)))
+                                      :on-complete
+                                      (lambda (completed-organizations)
+                                        (expect
+                                         (equal (list organization)
+                                                completed-organizations))
+                                        (cl-concurrent-kit:with-lock-held
+                                         (probe-lock)
+                                         (incf completion-count))
+                                        (sb-thread:signal-semaphore
+                                         completed-event))))
+                       (expect (= 2 (length threads)))
+                       (expect
+                        (sb-thread:wait-on-semaphore completed-event :timeout 5))
+                       (dolist (thread threads)
+                         (handler-case (cl-concurrent-kit:join-thread thread
+                                                                      :timeout
+                                                                      5)
+                           (error (condition)
+                             (expect
+                              (search "Fixture diagnostic logger failed"
+                                      (princ-to-string condition))))))
+                       (expect
+                        (every
+                         (lambda (thread)
+                           (not (sb-thread:thread-alive-p thread)))
+                         threads))
+                       (setf threads nil))
+                   (dolist (thread threads)
+                     (ignore-errors
+                      (cl-concurrent-kit:join-thread thread :timeout 5))))
+                 (cl-concurrent-kit:with-lock-held (probe-lock)
+                                                   (expect (>= signal-count 2))
+                                                   (expect
+                                                    (= 2 diagnostic-count))
+                                                   (expect (zerop read-count))
+                                                   (expect (= 1 error-count))
+                                                   (expect
+                                                    (= 1 completion-count)))))))
