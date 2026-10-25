@@ -128,22 +128,56 @@ Set `BASE_SOURCE_ROOT` and `CANDIDATE_SOURCE_ROOT` to clean workspaces at the
 exact revisions being compared. Verify each full revision with `jj`, and set
 `SOURCE_ROOT` to one workspace at a time when building. Use the same host,
 terminal dimensions, GHQ root, Git configuration, runtime, and Nix inputs for
-both revisions. Record each source revision, `flake.lock` digest, binary and
-core digests, runtime versions, and live harness digest. Keep the build and
-measurement steps serialized. Do not measure while another build, test suite,
-or benchmark is using the host.
+both revisions. For M5, keep all Nix inputs fixed except the `cl-process-kit`
+input being compared. Record each source revision, `flake.lock` digest, binary
+and core digests, runtime versions, and live harness digest. Use
+`shasum -a 256 "$SOURCE_ROOT/flake.lock"` and
+`shasum -a 256 "$SOURCE_ROOT/tests/live/harness"` to record the lock-file and
+harness digests. Keep the build and measurement steps serialized. Do not
+measure while another build, test suite, or benchmark is using the host.
 
-The command examples use uppercase shell variables for local inputs. Set the
-`M1_RUNNER` through `M5_RUNNER` variables to the reviewed driver for each
-metric. Keep the driver source and its digest with the raw results, and create
-a fresh output directory for each invocation.
+Record the full source revision from each clean workspace with
+`jj --repository "$SOURCE_ROOT" log --ignore-working-copy -r @ -n 1 --no-graph -T commit_id`.
+Capture the artifact path printed by the build command. M3 takes the paths
+`$ARTIFACT/bin/nerimux` and `$ARTIFACT/lib/nerimux/nerimux.core`; M5 takes the
+artifact path. Record the binary and core digests with `shasum -a 256`:
 
-Before collecting data, record the noise-screen repetition count and the number
-of comparison pairs in the run plan. Keep both values fixed for every metric and
-revision. Also record the maximum allowed one-, five-, and fifteen-minute load
-averages. Defer the run unless all three readings are at or below 4, 8, and 12,
-respectively, before and after each sample. Do not change these limits during a
-run.
+```bash
+shasum -a 256 "$BUILT_ARTIFACT/bin/nerimux" "$BUILT_ARTIFACT/lib/nerimux/nerimux.core"
+```
+
+Record the exact SBCL and Git executable paths and their `--version` output.
+Run `"$SBCL" --version` and `"$GIT" --version` to capture those values. M3 also
+requires the matching `SBCL_HOME`.
+
+Use these helpers in the same Bash session as the driver invocation:
+
+```bash
+source_revision() {
+  jj --repository "$1" log --ignore-working-copy -r @ -n 1 --no-graph -T commit_id
+}
+sha256_file() {
+  shasum -a 256 "$1" | awk '{print $1}'
+}
+SBCL="$(command -v sbcl)"
+GIT="$(command -v git)"
+SBCL_VERSION="$("$SBCL" --version)"
+GIT_VERSION="$("$GIT" --version)"
+```
+
+The checked-in M3 and M5 drivers are `scripts/benchmarks/m3-paired.py` and
+`scripts/benchmarks/m5-paired.py`; their helpers are in the same directory.
+There are no checked-in drivers for M1, M2, or M4. For those measurements, set
+`M1_RUNNER`, `M2_RUNNER`, or `M4_RUNNER` to the reviewed external driver, retain
+its source and digest with the raw results, and follow the driver contract in
+the corresponding section below. Create a fresh output directory for each
+invocation.
+
+Keep the reviewed driver's noise-screen and pairing plan fixed across the
+revisions, and retain that plan with the raw results. Record the maximum
+allowed one-, five-, and fifteen-minute load averages. Run `uptime` immediately
+before and after each sample. Defer the run unless each reading is at or below
+4, 8, and 12, respectively. Do not change these limits during a run.
 
 Use a monotonic clock for elapsed times. Run a same-code noise screen with the
 same workload and harness, then compare the revisions in balanced pairs.
@@ -156,16 +190,12 @@ incomplete marker, changed output, or changed workload. Retain the raw timings,
 pair order, load readings, median, range, and paired deltas; do not use a median
 alone to claim a speedup.
 
-Record the one-, five-, and fifteen-minute load averages immediately before
-and after every sample. Reject the sample if any reading exceeds its recorded
-limit. Use the same limits for both revisions and retain the readings with the
-results.
-
-Build each revision with the same flake inputs and retain the printed output
-path:
+For M1 through M4, build each revision with the same flake inputs and retain
+the printed output path:
 
 ```bash
-nix build --no-link --print-out-paths "path:$SOURCE_ROOT#nerimux"
+BUILT_ARTIFACT="$(nix build --no-link --print-out-paths "path:$SOURCE_ROOT#nerimux")"
+BUILT_BINARY="$BUILT_ARTIFACT/bin/nerimux"
 ```
 
 Run Nix builds through the host's configured heavy-build lock. Use the same
@@ -177,8 +207,9 @@ measurements.
 Use a fresh lane and a fresh, empty fixture directory for each sample. Give
 each sample a unique `LIVE_BASE_TMPDIR`. Set `GHQ_ROOT` to the same readable
 root for both revisions, then run the live harness self-check before timing.
-Set `M1_RUNNER` to the measurement driver and invoke it with the selected binary
-and a unique sample label:
+The external driver accepts the selected binary and a unique sample label.
+It starts a fresh lane and saves the pane capture, capture interval, workload
+signature, and binary digest for each sample. Invoke it with:
 
 ```bash
 export LIVE_BASE_TMPDIR="$(mktemp -d)"
@@ -191,8 +222,7 @@ tests/live/harness self-check L1
 python3 "$M1_RUNNER" "$NERIMUX_BIN" "$SAMPLE_LABEL"
 ```
 
-For each timed sample, use a measurement driver that starts a fresh lane with
-the selected binary and starts a monotonic timer immediately before
+The driver starts a monotonic timer immediately before
 `tests/live/harness start L1 "$NERIMUX_BIN"` launches `nerimux attach`. The
 driver then polls `tmux -L nmx-L1 capture-pane -p -t app:0.0` every 10 ms
 with the full lane environment from the harness, including `HOME`, `TMPDIR`,
@@ -205,27 +235,32 @@ signature, and binary digest. The target is 1.0 s or less.
 
 ### M2: complete status pass
 
-Use the real GHQ root and record the workload signature before starting. Prepare
-the isolated run directory for the selected revision and set `M2_RUNNER` to its
-measurement script. Invoke it with that run directory and a unique sample
-label:
+Use the real GHQ root and record the workload signature before starting. Set
+`NERIMUX_BIN` to the selected binary and prepare the isolated run directory for
+that revision. Set `M2_RUNNER` to the external measurement script and invoke it
+with the run directory and a unique sample label:
 
 ```bash
+export NERIMUX_BIN="$BUILT_BINARY"
 bash "$M2_RUNNER" "$M2_RUN_ROOT" "$SAMPLE_LABEL"
 ```
 
-The runner calls `refresh-workspace-organizations-async`. In `on-catalog`, after
-recording the workload, it starts the timer; the call then proceeds to its
-status pass. It stops in `on-complete`. Record scan errors, repository errors,
-and whether the completion callback ran. Compare only runs with the same
-workload. The target is 3 s or less.
+The external driver must load the selected binary's system, call
+`refresh-workspace-organizations-async`, and start its monotonic timer in
+`on-catalog` after recording the workload. Stop the timer in `on-complete`.
+Save the elapsed time, workload signature, scan errors, repository errors, and
+whether the completion callback ran. Compare only runs with the same workload.
+Invoke the driver with the isolated run directory and a unique sample label.
+The target is 3 s or less.
 
 ### M3: key receive to changed frame send
 
-Use a fresh attached session and the same stable GHQ root for both revisions.
-Choose a tree with at least two selectable rows, and record the initial tree and
-selection signatures. The driver verifies these signatures and confirms that
-the `n` key advances the selection before accepting a sample.
+Use the same stable GHQ root for both revisions. The checked-in driver creates
+a fresh isolated live-harness lane, obtains the GHQ root with `ghq root`, starts
+the attached session, waits for the catalog and a stable selection, and records
+the initial tree and selection signatures. It selects the next unique row and
+confirms that `n` advances the selection before accepting a sample. It sends
+the key only after the pre-sample load gate passes.
 
 Create a fresh fixture directory for the runner's global Git configuration.
 This avoids including host-specific settings:
@@ -244,19 +279,42 @@ cat > "$M3_FIXTURE_ROOT/gitconfig-global" <<EOF
 [core]
     excludesFile = $M3_FIXTURE_ROOT/excludes
 EOF
-test "$(grep -c '^    path = ' "$M3_FIXTURE_ROOT/gitconfig-global")" -eq 2
 test -f "$M3_FIXTURE_ROOT/excludes"
 ```
 
-Set `M3_RUNNER` to the paired internal measurement
-driver, then pass both clean source workspaces, full revisions, built artifacts,
-artifact digests, runtime versions, fixture root, and output directory. The
-driver must use identical `flake.lock` files and Nix inputs for both arms, run
-the noise screen, alternate pair order, and preserve a summary plus every raw
-record. Invoke it with the same inputs as the builds:
+The driver validates this fixture, copies `gitconfig-global` into its isolated
+lane, and sets `GIT_CONFIG_GLOBAL` to that copy. Build both source revisions
+with the same inputs and capture their output paths:
 
 ```bash
-python3 "$M3_RUNNER" \
+BASE_REVISION="$(source_revision "$BASE_SOURCE_ROOT")"
+CANDIDATE_REVISION="$(source_revision "$CANDIDATE_SOURCE_ROOT")"
+BASE_ARTIFACT="$(nix build --no-link --print-out-paths "path:$BASE_SOURCE_ROOT#nerimux")"
+CANDIDATE_ARTIFACT="$(nix build --no-link --print-out-paths "path:$CANDIDATE_SOURCE_ROOT#nerimux")"
+```
+
+Then set each artifact's binary and core paths and digests:
+
+```bash
+BASE_BINARY="$BASE_ARTIFACT/bin/nerimux"
+BASE_CORE="$BASE_ARTIFACT/lib/nerimux/nerimux.core"
+BASE_BINARY_SHA256="$(sha256_file "$BASE_BINARY")"
+BASE_CORE_SHA256="$(sha256_file "$BASE_CORE")"
+CANDIDATE_BINARY="$CANDIDATE_ARTIFACT/bin/nerimux"
+CANDIDATE_CORE="$CANDIDATE_ARTIFACT/lib/nerimux/nerimux.core"
+CANDIDATE_BINARY_SHA256="$(sha256_file "$CANDIDATE_BINARY")"
+CANDIDATE_CORE_SHA256="$(sha256_file "$CANDIDATE_CORE")"
+```
+
+Pass both clean source workspaces, full revisions, those artifact paths and
+digests, runtime versions, fixture root, and output directory. The driver
+requires identical `flake.lock` files, runs the noise screen, alternates pair
+order, and preserves a summary plus every raw record. Invoke it with the same
+inputs as the builds. Use a fresh output directory:
+
+```bash
+M3_OUTPUT_DIR="$(mktemp -d)"
+python3 scripts/benchmarks/m3-paired.py \
   --baseline-source-root "$BASE_SOURCE_ROOT" \
   --baseline-source-revision "$BASE_REVISION" \
   --baseline-binary "$BASE_BINARY" \
@@ -274,9 +332,10 @@ python3 "$M3_RUNNER" \
   --fixture-root "$M3_FIXTURE_ROOT" --output-dir "$M3_OUTPUT_DIR"
 ```
 
-Instrument `nerimux/transport:READ-FRAME` to
-timestamp the decoded `n` key, `nerimux::%HANDLE-MULTI-CLIENT-MESSAGE` to
-confirm dispatch, and
+The driver starts the harness and performs setup and key injection itself; do
+not manually interact with the terminal during a sample. It instruments
+`nerimux/transport:READ-FRAME` to timestamp the decoded `n` key,
+`nerimux::%HANDLE-MULTI-CLIENT-MESSAGE` to confirm dispatch, and
 `nerimux::%SEND-CLIENT-FRAME` to timestamp completion of the changed frame
 send. Use `get-internal-real-time` for both timestamps and calculate the
 receive-to-send interval inside the server. Confirm that the key and frame use
@@ -288,15 +347,18 @@ polling delay is not part of this metric. The target is 130 ms or less.
 ### M4: picker frame construction
 
 Use the same GHQ root, populated picker, terminal dimensions, and tree for both
-revisions. Record the workload and terminal signatures. Set `M4_RUNNER` to the
-paired frame measurement driver and invoke its `m4` mode for the selected run
-plan. It must refresh the catalog, verify the workload signature, load each
-revision, warm `%render-client-frame`, then measure a complete frame
-construction per sample with the same monotonic clock. Record a non-empty
-frame's byte length and hash; require them to match across both revisions.
+revisions. Set `M4_RUN_PLAN` to a plan that supplies the baseline and candidate
+source revisions, artifact digests, terminal dimensions, and expected workload
+signature. The external driver contract is a paired frame driver that reads
+those fields, refreshes the catalog, verifies the workload signature, loads
+each revision, warms `%render-client-frame`, then measures a complete frame
+construction with the same monotonic clock. It must record a non-empty frame's
+byte length and hash and require them to match across both revisions. Keep
+the plan format defined by the driver, include that schema with the driver
+source, and retain the exact plan with the raw results.
 
 ```bash
-bash "$M4_RUNNER" m4 --run
+bash "$M4_RUNNER" --run-plan "$M4_RUN_PLAN"
 ```
 
 The target is 16 ms or less.
@@ -306,16 +368,20 @@ The target is 16 ms or less.
 Build separate arms from the same Nerimux source revision, varying only the
 `cl-process-kit` input between its baseline and candidate revisions. Record
 both process-kit revisions and verify that each runner loaded the expected
-source. Set `M5_RUNNER` to the paired process-kit measurement driver. For
-example:
+source. The checked-in driver accepts both frozen process-kit workspaces and
+verifies the source tree loaded by each arm. For example:
 
 ```bash
-nix build --no-link --print-out-paths \
+set -euo pipefail
+NERIMUX_SOURCE_REVISION="$(source_revision "$NERIMUX_SOURCE_ROOT")"
+PK_BASELINE_REVISION="$(source_revision "$PK_BASELINE_SOURCE_ROOT")"
+PK_CANDIDATE_REVISION="$(source_revision "$PK_CANDIDATE_SOURCE_ROOT")"
+M5_BASE_ARTIFACT="$(nix build --no-link --print-out-paths \
   --override-input cl-process-kit "path:$PK_BASELINE_SOURCE_ROOT" \
-  "path:$NERIMUX_SOURCE_ROOT#nerimux"
-nix build --no-link --print-out-paths \
+  "path:$NERIMUX_SOURCE_ROOT#nerimux")"
+M5_CANDIDATE_ARTIFACT="$(nix build --no-link --print-out-paths \
   --override-input cl-process-kit "path:$PK_CANDIDATE_SOURCE_ROOT" \
-  "path:$NERIMUX_SOURCE_ROOT#nerimux"
+  "path:$NERIMUX_SOURCE_ROOT#nerimux")"
 ```
 
 Create a disposable seed repository and a linked worktree, then use that same
@@ -329,24 +395,34 @@ jj -R "$M5_SEED_REPO" workspace add --colocate --name m5-git-target \
 git -C "$M5_GIT_TARGET" rev-parse --show-toplevel
 ```
 
-Give the M5 driver the frozen Nerimux and process-kit source revisions, both
-build artifacts and their digests, runtime versions, the shared Git target, and
-an empty output directory. Invoke it with these inputs:
+Set the binary and core digests for both built artifacts:
 
 ```bash
-python3 "$M5_RUNNER" \
+M5_BASE_BINARY_SHA256="$(sha256_file "$M5_BASE_ARTIFACT/bin/nerimux")"
+M5_BASE_CORE_SHA256="$(sha256_file "$M5_BASE_ARTIFACT/lib/nerimux/nerimux.core")"
+M5_CANDIDATE_BINARY_SHA256="$(sha256_file "$M5_CANDIDATE_ARTIFACT/bin/nerimux")"
+M5_CANDIDATE_CORE_SHA256="$(sha256_file "$M5_CANDIDATE_ARTIFACT/lib/nerimux/nerimux.core")"
+```
+
+Give the M5 driver the frozen Nerimux and process-kit source revisions, both
+build artifacts and their digests, runtime versions, and the shared Git target.
+Use a fresh output directory, then invoke it with these inputs:
+
+```bash
+M5_OUTPUT_DIR="$(mktemp -d)"
+python3 scripts/benchmarks/m5-paired.py \
   --nerimux-source-root "$NERIMUX_SOURCE_ROOT" \
   --nerimux-source-revision "$NERIMUX_SOURCE_REVISION" \
   --pk-baseline-source-root "$PK_BASELINE_SOURCE_ROOT" \
   --pk-baseline-source-revision "$PK_BASELINE_REVISION" \
   --pk-candidate-source-root "$PK_CANDIDATE_SOURCE_ROOT" \
   --pk-candidate-source-revision "$PK_CANDIDATE_REVISION" \
-  --baseline-artifact "$BASE_ARTIFACT" \
-  --baseline-binary-sha256 "$BASE_BINARY_SHA256" \
-  --baseline-core-sha256 "$BASE_CORE_SHA256" \
-  --candidate-artifact "$CANDIDATE_ARTIFACT" \
-  --candidate-binary-sha256 "$CANDIDATE_BINARY_SHA256" \
-  --candidate-core-sha256 "$CANDIDATE_CORE_SHA256" \
+  --baseline-artifact "$M5_BASE_ARTIFACT" \
+  --baseline-binary-sha256 "$M5_BASE_BINARY_SHA256" \
+  --baseline-core-sha256 "$M5_BASE_CORE_SHA256" \
+  --candidate-artifact "$M5_CANDIDATE_ARTIFACT" \
+  --candidate-binary-sha256 "$M5_CANDIDATE_BINARY_SHA256" \
+  --candidate-core-sha256 "$M5_CANDIDATE_CORE_SHA256" \
   --sbcl "$SBCL" --sbcl-home "$SBCL_HOME" --sbcl-version "$SBCL_VERSION" \
   --git "$GIT" --git-version "$GIT_VERSION" \
   --git-target "$M5_GIT_TARGET" --output-dir "$M5_OUTPUT_DIR"
