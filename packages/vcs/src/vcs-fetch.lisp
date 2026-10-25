@@ -18,11 +18,43 @@
   (cl-concurrent-kit:with-lock-held (*fetch-lock*)
                                     (remhash key *in-progress-fetches*)))
 
+(defun %fetch-operation-options (&optional existing)
+  (let ((test-update *worktree-test-environment-update*))
+    (if (null test-update)
+        (when existing
+          (list :execution-options existing))
+        (let* ((options (copy-list existing))
+               (existing-update (getf options :environment-update)))
+          (setf (getf options :environment-update)
+                (append
+                 (remove-if
+                  (lambda (entry)
+                    (assoc (car entry) test-update :test (function string=)))
+                  existing-update)
+                 test-update))
+          (list :execution-options options)))))
+
+(defun %fetch-operation-arguments (arguments)
+  (if (null *worktree-test-environment-update*)
+      arguments
+      (let ((marker (position :execution-options arguments
+                              :from-end t
+                              :test (function eq))))
+        (append (if marker
+                    (subseq arguments 0 marker)
+                    arguments)
+                (%fetch-operation-options
+                 (when marker
+                   (nth (1+ marker) arguments)))))))
+
 (defun %fetch-optional-output (function &rest arguments)
   (handler-case
       (values (string-right-trim '(#\Newline #\Return)
                                  (or (vcs-kit:process-result-stdout
-                                      (apply function arguments)) ""))
+                                      (apply function
+                                             (%fetch-operation-arguments
+                                              arguments)))
+                                     ""))
               t)
     (vcs-kit:git-exit-error (condition)
       (unless (eql 1 (vcs-kit:git-exit-error-exit-code condition))
@@ -42,7 +74,9 @@ origin) are also asked of directories that are not repositories at all."
   (handler-case
       (values (string-right-trim '(#\Newline #\Return)
                                  (or (vcs-kit:process-result-stdout
-                                      (apply function arguments))
+                                      (apply function
+                                             (%fetch-operation-arguments
+                                              arguments)))
                                      ""))
               t)
     (error () (values nil nil))))
@@ -98,14 +132,15 @@ refs. One that has an origin is not: a fetch failure there means the branch
 this is about to create from may no longer exist on the remote, so it is
 signalled rather than resolved from a stale tracking ref."
   (when (and branch (plusp (length branch)) (%repository-origin-p repository))
-    (vcs-kit:vcs-fetch
-     (%repository-backend repository)
-     "origin" (format nil "+refs/heads/~A:refs/remotes/origin/~A" branch branch)
-     :execution-options
-     '(:environment-update (("GIT_TERMINAL_PROMPT" . "0")
-                            ("GIT_ASKPASS" . "true")
-                            ("SSH_ASKPASS" . "true")
-                            ("GIT_SSH_COMMAND" . "ssh -oBatchMode=yes"))))))
+    (apply (function vcs-kit:vcs-fetch)
+           (%repository-backend repository)
+           "origin"
+           (format nil "+refs/heads/~A:refs/remotes/origin/~A" branch branch)
+           (%fetch-operation-options
+            '(:environment-update (("GIT_TERMINAL_PROMPT" . "0")
+                                   ("GIT_ASKPASS" . "true")
+                                   ("SSH_ASKPASS" . "true")
+                                   ("GIT_SSH_COMMAND" . "ssh -oBatchMode=yes")))))))
 
 (defun %bare-origin-fetch-p (repository backend)
   (and (string= "true" (%rev-parse repository "--is-bare-repository"))
@@ -130,8 +165,10 @@ signalled rather than resolved from a stale tracking ref."
   (let ((backend (%repository-backend repository)))
     (if (%bare-origin-fetch-p repository backend)
         (progn
-          (vcs-kit:vcs-fetch backend "origin"
-                             "+refs/heads/*:refs/remotes/origin/*")
+          (apply #'vcs-kit:vcs-fetch
+                 backend "origin"
+                 "+refs/heads/*:refs/remotes/origin/*"
+                 (%fetch-operation-options))
           (let ((checked (%repository-checked-handle repository)))
             ;; A dangling symbolic HEAD can express user intent, so preserve it.
             (unless (or (nth-value 1 (%fetch-optional-output
@@ -140,8 +177,12 @@ signalled rather than resolved from a stale tracking ref."
                         (nth-value 1 (%fetch-optional-output
                                       #'vcs-kit:git-show-ref checked
                                       "--verify" "--quiet" "refs/remotes/origin/HEAD")))
-              (vcs-kit:vcs-remote backend "set-head" "origin" "-a"))))
-        (vcs-kit:vcs-fetch backend))))
+              (apply #'vcs-kit:vcs-remote
+                     backend "set-head" "origin" "-a"
+                     (%fetch-operation-options)))))
+        (apply #'vcs-kit:vcs-fetch
+               backend
+               (%fetch-operation-options)))))
 
 (defun fetch-repository (repository)
   "Fetch REPOSITORY's remotes with git fetch, then refresh its status."
@@ -154,6 +195,14 @@ signalled rather than resolved from a stale tracking ref."
 (defun %read-fetched-repository-status (repository)
   (%fetch-repository-remotes repository)
   (%read-repository-status repository))
+
+(defun %fetch-status-reader ()
+  (let ((test-update *worktree-test-environment-update*))
+    (if (null test-update)
+        (function %read-fetched-repository-status)
+        (lambda (repository)
+          (let ((*worktree-test-environment-update* test-update))
+            (%read-fetched-repository-status repository))))))
 
 (defun fetch-repository-async (repository &key
                                           on-accepted on-start on-deduplicated
@@ -177,7 +226,7 @@ with NIL without starting another worker."
                                                       (declare (ignore current))
                                                       (funcall on-start)))
                                      :status-reader
-                                     #'%read-fetched-repository-status
+                                     (%fetch-status-reader)
                                      :on-complete
                                      (lambda (repositories)
                                        (declare (ignore repositories))
@@ -231,7 +280,7 @@ with NIL without starting another set of workers."
            (when on-error
              (funcall on-error repository condition)))
          :status-reader
-         #'%read-fetched-repository-status
+         (%fetch-status-reader)
          :callback-dispatch
          callback-dispatch))
          (error (condition)
