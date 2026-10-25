@@ -90,7 +90,7 @@ The historical samples below came from a standalone PTY runner that is no
 longer in the repository. It measured from just before `forkpty` launched
 `attach` until the first non-empty PTY output, and used a matching `printf`
 control run to estimate PTY and shell startup noise. The current live terminal
-harness is documented in [`tests/live/README.md`](../../tests/live/README.md).
+harness is documented in `tests/live/README.md`.
 The P-perf M1 procedure below measures the first visible tree row rather than
 the first PTY byte.
 
@@ -129,8 +129,11 @@ exact revisions being compared. Verify each full revision with `jj`, and set
 `SOURCE_ROOT` to one workspace at a time when building. Use the same host,
 terminal dimensions, GHQ root, Git configuration, runtime, and Nix inputs for
 both revisions. For M5, keep all Nix inputs fixed except the `cl-process-kit`
-input being compared. Record each source revision, `flake.lock` digest, binary
-and core digests, runtime versions, and live harness digest. Use
+input being compared. Record each clean source revision, `flake.lock` digest,
+runtime versions, and live harness digest. For runs that use a built Nerimux
+artifact, also record its path and binary/core digests. M2 loads source through
+ASDF and has no Nerimux binary or core artifact; its clean source revision
+identifies the code being measured. Use
 `shasum -a 256 "$SOURCE_ROOT/flake.lock"` and
 `shasum -a 256 "$SOURCE_ROOT/tests/live/harness"` to record the lock-file and
 harness digests. Keep the build and measurement steps serialized. Do not
@@ -138,9 +141,10 @@ measure while another build, test suite, or benchmark is using the host.
 
 Record the full source revision from each clean workspace with
 `jj --repository "$SOURCE_ROOT" log --ignore-working-copy -r @ -n 1 --no-graph -T commit_id`.
-Capture the artifact path printed by the build command. M3 takes the paths
-`$ARTIFACT/bin/nerimux` and `$ARTIFACT/lib/nerimux/nerimux.core`; M5 takes the
-artifact path. Record the binary and core digests with `shasum -a 256`:
+Capture the artifact path printed by the build command when the arm uses a
+Nerimux artifact. M3 takes the paths `$ARTIFACT/bin/nerimux` and
+`$ARTIFACT/lib/nerimux/nerimux.core`; M5 takes the artifact path. Record the
+binary and core digests with `shasum -a 256`:
 
 ```bash
 shasum -a 256 "$BUILT_ARTIFACT/bin/nerimux" "$BUILT_ARTIFACT/lib/nerimux/nerimux.core"
@@ -148,7 +152,9 @@ shasum -a 256 "$BUILT_ARTIFACT/bin/nerimux" "$BUILT_ARTIFACT/lib/nerimux/nerimux
 
 Record the exact SBCL and Git executable paths and their `--version` output.
 Run `"$SBCL" --version` and `"$GIT" --version` to capture those values. M3 also
-requires the matching `SBCL_HOME`.
+requires the matching `SBCL_HOME`. Run the driver from the Nerimux Nix
+development shell so its SBCL runtime matches the build, and fail preflight if
+`SBCL_HOME` is unset:
 
 Use these helpers in the same Bash session as the driver invocation:
 
@@ -163,15 +169,17 @@ SBCL="$(command -v sbcl)"
 GIT="$(command -v git)"
 SBCL_VERSION="$("$SBCL" --version)"
 GIT_VERSION="$("$GIT" --version)"
+SBCL_HOME="${SBCL_HOME:?enter the Nerimux nix develop shell first}"
 ```
 
 The checked-in M3 and M5 drivers are `scripts/benchmarks/m3-paired.py` and
 `scripts/benchmarks/m5-paired.py`; their helpers are in the same directory.
-There are no checked-in drivers for M1, M2, or M4. For those measurements, set
-`M1_RUNNER`, `M2_RUNNER`, or `M4_RUNNER` to the reviewed external driver, retain
-its source and digest with the raw results, and follow the driver contract in
-the corresponding section below. Create a fresh output directory for each
-invocation.
+There are no checked-in drivers for M1, M2, or M4. The commands in those
+sections are driver interfaces, not self-contained commands: obtain and review
+the matching external runner before starting. Set `M1_RUNNER`,
+`M2_PREFLIGHT_RUNNER`, `M2_RUNNER`, `M2_PROFILE_RUNNER`, or `M4_RUNNER` to the
+corresponding runner, and retain its source and digest with the raw results.
+Create a fresh output directory for each invocation.
 
 Keep the reviewed driver's noise-screen and pairing plan fixed across the
 revisions, and retain that plan with the raw results. Record the maximum
@@ -190,8 +198,9 @@ incomplete marker, changed output, or changed workload. Retain the raw timings,
 pair order, load readings, median, range, and paired deltas; do not use a median
 alone to claim a speedup.
 
-For M1 through M4, build each revision with the same flake inputs and retain
-the printed output path:
+For M1, M3, and M4, build each revision with the same flake inputs and retain
+the printed output path. M2 loads the source checkout through ASDF and does not
+use the Nerimux binary artifact:
 
 ```bash
 BUILT_ARTIFACT="$(nix build --no-link --print-out-paths "path:$SOURCE_ROOT#nerimux")"
@@ -205,11 +214,17 @@ measurements.
 ### M1: attach to first visible tree row
 
 Use a fresh lane and a fresh, empty fixture directory for each sample. Give
-each sample a unique `LIVE_BASE_TMPDIR`. Set `GHQ_ROOT` to the same readable
-root for both revisions, then run the live harness self-check before timing.
+each sample a unique `LIVE_BASE_TMPDIR`. Set `GHQ_ROOT` to the same populated
+root for both revisions, using the setup described in M3 if needed. Require a
+visible repository row under `Repositories` before timing, and do not change
+the root between arms. Run the live harness self-check before timing.
 The external driver accepts the selected binary and a unique sample label.
 It starts a fresh lane and saves the pane capture, capture interval, workload
-signature, and binary digest for each sample. Invoke it with:
+signature, and binary digest for each sample. Run it from the matching source
+workspace and verify the source revision before each arm. The saved historical
+M1 runner is candidate-specific; it cannot validate a baseline checkout. Use a
+separate reviewed baseline runner or a parameterized runner that verifies both
+revisions. Invoke the selected arm's runner with:
 
 ```bash
 export LIVE_BASE_TMPDIR="$(mktemp -d)"
@@ -235,32 +250,63 @@ signature, and binary digest. The target is 1.0 s or less.
 
 ### M2: complete status pass
 
-Use the real GHQ root and record the workload signature before starting. Set
-`NERIMUX_BIN` to the selected binary and prepare the isolated run directory for
-that revision. Set `M2_RUNNER` to the external measurement script and invoke it
-with the run directory and a unique sample label:
+Use the real GHQ root and record the workload signature before starting. M2
+loads `nerimux-vcs` from the source checkout through ASDF; it does not run the
+built Nerimux binary. Run each arm from its matching clean source workspace and
+record that workspace's revision. Prepare a separate fresh `M2_RUN_ROOT` per
+arm with the runner's `L8` directories for `HOME`, `TMPDIR`, `XDG_STATE_HOME`,
+`TMUX_TMPDIR`, and Git fixtures/configuration. Set
+`NERIMUX_SIBLING_REGISTRY` to the colon-separated sibling package source roots
+used by the runner. Run its environment and source-loading preflight before
+sampling:
 
 ```bash
-export NERIMUX_BIN="$BUILT_BINARY"
-bash "$M2_RUNNER" "$M2_RUN_ROOT" "$SAMPLE_LABEL"
+bash "$M2_PREFLIGHT_RUNNER" "$M2_RUN_ROOT"
 ```
 
-The external driver must load the selected binary's system, call
-`refresh-workspace-organizations-async`, and start its monotonic timer in
-`on-catalog` after recording the workload. Stop the timer in `on-complete`.
-Save the elapsed time, workload signature, scan errors, repository errors, and
-whether the completion callback ran. Compare only runs with the same workload.
-Invoke the driver with the isolated run directory and a unique sample label.
-The target is 3 s or less.
+Do not reuse a prior run root. The external measurement wrapper takes the run
+root and a sample ID accepted by that runner:
+
+```bash
+cd "$SOURCE_ROOT"
+bash "$M2_RUNNER" "$M2_RUN_ROOT" "$SAMPLE_ID"
+```
+
+Use balanced pairs, alternate which arm runs first between pairs, and save the
+order with the raw results. The Lisp runner calls `refresh-workspace-organizations-async`, records
+the organization/repository/worktree counts and load in `on-catalog`, starts
+its monotonic timer there, and stops in `on-complete`. Retain `status`, elapsed
+time, the three load averages, scan and repository error counts, callback
+counts, and workload signature. Also run `uptime` immediately before and after
+each sample; reject samples outside the shared load gate. Compare only runs
+with the same workload. The target is 3 s or less.
+
+For the supporting profile, run the profile wrapper once from each matching
+source workspace against the same GHQ root and isolated environment. Retain the
+profile report separately: its concurrent accumulated Git times are not wall
+clock time, and the report does not contain a sample load reading. The profile
+wrapper takes the run root:
+
+```bash
+cd "$SOURCE_ROOT"
+bash "$M2_PROFILE_RUNNER" "$M2_RUN_ROOT"
+```
 
 ### M3: key receive to changed frame send
 
 Use the same stable GHQ root for both revisions. The checked-in driver creates
 a fresh isolated live-harness lane, obtains the GHQ root with `ghq root`, starts
 the attached session, waits for the catalog and a stable selection, and records
-the initial tree and selection signatures. It selects the next unique row and
-confirms that `n` advances the selection before accepting a sample. It sends
-the key only after the pre-sample load gate passes.
+the initial tree and selection signatures. The picker must display
+organization, repository, and worktree entries. The next selection must be
+unique, and `n` must advance the selection before a sample is accepted. The
+driver sends the key only after the pre-sample load gate passes.
+
+If the GHQ root is empty, set `REPOSITORY_URL` to a cloneable URL for a
+repository under an organization and run `ghq get "$REPOSITORY_URL"` before
+either arm. Keep the root and its repositories/worktrees unchanged across the
+pair. Before measuring, verify the picker shows those entries and has a unique
+next selection; the driver rejects a sample if either condition fails.
 
 Create a fresh fixture directory for the runner's global Git configuration.
 This avoids including host-specific settings:
@@ -346,20 +392,20 @@ polling delay is not part of this metric. The target is 130 ms or less.
 
 ### M4: picker frame construction
 
-Use the same GHQ root, populated picker, terminal dimensions, and tree for both
-revisions. Set `M4_RUN_PLAN` to a plan that supplies the baseline and candidate
-source revisions, artifact digests, terminal dimensions, and expected workload
-signature. The external driver contract is a paired frame driver that reads
-those fields, refreshes the catalog, verifies the workload signature, loads
-each revision, warms `%render-client-frame`, then measures a complete frame
-construction with the same monotonic clock. It must record a non-empty frame's
-byte length and hash and require them to match across both revisions. Keep
-the plan format defined by the driver, include that schema with the driver
-source, and retain the exact plan with the raw results.
-
-```bash
-bash "$M4_RUNNER" --run-plan "$M4_RUN_PLAN"
-```
+Use a paired external frame driver; no M4 runner or plan schema is checked in.
+The historical launcher is pinned to specific workspaces and artifacts, so it
+is not a reusable command for a new pair.
+Record the driver's source and digest, actual command line, both source
+revisions, artifact paths and digests, and the exact workload signature. Record
+organization, repository, worktree, pane, picker item, and repository error
+counts, plus terminal dimensions; require the same nonempty signature and
+dimensions on both arms. Warm `%render-client-frame` before timing a complete
+frame with the same monotonic clock. Alternate which arm runs first in each
+balanced pair and record the order. Record `uptime` immediately before and
+after each sample and keep the load readings with the result. Each result must
+include source and artifact identity, load, dimensions, elapsed time, warmup
+and measured counts, non-empty frame byte length and hash, runner exit, and
+post-check status. Require frame length and hash to match across both arms.
 
 The target is 16 ms or less.
 
@@ -385,14 +431,21 @@ M5_CANDIDATE_ARTIFACT="$(nix build --no-link --print-out-paths \
 ```
 
 Create a disposable seed repository and a linked worktree, then use that same
-worktree as the target for both arms. For example:
+worktree as the target for both arms. Use Jujutsu and Git versions that support
+`jj workspace add --colocate`; record `jj --version` and `git --version`, then
+verify the target appears in `git worktree list --porcelain`. For example:
 
 ```bash
+M5_SETUP_ROOT="$(mktemp -d)"
+M5_SEED_REPO="$M5_SETUP_ROOT/seed"
+M5_GIT_TARGET="$M5_SETUP_ROOT/target"
+mkdir -p "$M5_SEED_REPO"
 jj git init "$M5_SEED_REPO"
 jj -R "$M5_SEED_REPO" new -m benchmark-seed
 jj -R "$M5_SEED_REPO" workspace add --colocate --name m5-git-target \
   --revision @ "$M5_GIT_TARGET"
 git -C "$M5_GIT_TARGET" rev-parse --show-toplevel
+git -C "$M5_GIT_TARGET" worktree list --porcelain
 ```
 
 Set the binary and core digests for both built artifacts:

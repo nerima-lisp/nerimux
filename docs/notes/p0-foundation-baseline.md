@@ -10,12 +10,13 @@ machine.
   files. `scripts/checks/manifest-check.lisp` is the reproducer.
 - The suite-structure scan visits 392 Lisp test files. `scripts/checks/suite-structure-check.pl .`
   is the reproducer.
-- The first-frame benchmark has recorded control and attach samples in
-  `docs/src/benchmarks.md`. The recorded attach median changed from 89.115 ms
-  to 131.448 ms, with a 32.976 ms control noise floor; the document does not
-  claim that this is a current-tree measurement.
-- No key-update benchmark driver or measured key-update result exists in this
-  tree, so that baseline remains unmeasured rather than being inferred.
+- The historical attach-to-first-nonempty-PTY-output benchmark has recorded
+  control and attach samples in `docs/src/benchmarks.md`. Its attach median
+  changed from 89.115 ms to 131.448 ms, with a 32.976 ms control noise floor;
+  this is not the current M1 first-visible-tree-row measurement.
+- The key-update benchmark was unfinished when this note was written. The M3
+  driver is now checked in under `scripts/benchmarks`, but its internal
+  key-to-frame timing still needs to be measured.
 
 ## Coverage and deadlock baseline
 
