@@ -69,7 +69,89 @@
              (lambda (&rest args) (declare (ignore args)) repository)))
          ,@body))))
 
+(defmacro %with-global-main-thread-callback-queue (&body body)
+  "Run BODY against an isolated callback queue shared with worker threads."
+  (let ((saved (gensym "SAVED-CALLBACKS")))
+    `(let ((,saved
+            (cl-concurrent-kit:with-lock-held (nerimux::*main-thread-callback-lock*)
+              (prog1 nerimux::*main-thread-callbacks*
+                (setf nerimux::*main-thread-callbacks* nil)))))
+       (unwind-protect
+           (progn ,@body)
+         (cl-concurrent-kit:with-lock-held (nerimux::*main-thread-callback-lock*)
+           (setf nerimux::*main-thread-callbacks*
+                 (nconc nerimux::*main-thread-callbacks* ,saved)))))))
+
 (describe "worktree assignment acceptance"
+  (it "workspace-empty-catalog-guidance: attaches and renders first-repository guidance"
+    (with-fake-session (session)
+      (%with-global-main-thread-callback-queue
+        (let* ((root
+                 (format nil "~A/nerimux-empty-ghq-guidance-~D-~D/"
+                         (string-right-trim
+                          "/" (namestring (host-kit:temporary-directory)))
+                         (sb-posix:getpid)
+                         (get-universal-time)))
+               (nerimux/vcs::*ghq-root-cache* root)
+               (nerimux/vcs::*workspace-organizations* nil)
+               (nerimux::*clients* nil)
+               (nerimux::*workspace-catalog-refresh-started-p* nil)
+               (nerimux::*workspace-catalog-loaded-p* nil)
+               (nerimux::*workspace-operation-jobs* (make-hash-table :test (function equal)))
+               (nerimux::*workspace-scan-progress* nil)
+               (nerimux::*workspace-file-diffs* (make-hash-table :test (function equal)))
+               (nerimux::*workspace-file-diffs-order* nil)
+               (nerimux::*workspace-refreshing-ids* (make-hash-table :test (function equal)))
+               (nerimux::*workspace-stale-ids* (make-hash-table :test (function equal))))
+          (ensure-directories-exist (format nil "~Aplaceholder" root))
+          (unwind-protect
+               (with-temporary-posix-environment-variable ("GHQ_ROOT" root)
+                 (with-test-listener
+                     (listener socket-path (%test-socket-path "f4-empty-ghq") :backlog 4)
+                   (let* ((client (nerimux/net:connect-to socket-path))
+                          (server-socket (nerimux/net:accept-connection listener))
+                          (conn nil))
+                     (unwind-protect
+                          (progn
+                            (setf conn (nerimux::%add-client server-socket))
+                            (nerimux/transport:send-frame
+                             (nerimux/net:socket-stream client)
+                             (nerimux/protocol:msg-attach 24 160))
+                            (finish-output (nerimux/net:socket-stream client))
+                            (expect (null (nerimux::%read-and-dispatch-client-message
+                                           session conn)))
+                            (expect (= 160 (nerimux::client-conn-cols conn)))
+                            (nerimux/test/vcs::%wait-for-test-worker
+                             (lambda (timeout-seconds)
+                               (let ((deadline
+                                       (+ (get-internal-real-time)
+                                          (round (* timeout-seconds
+                                                    internal-time-units-per-second)))))
+                                 (loop until nerimux::*workspace-catalog-loaded-p*
+                                       do (when (>= (get-internal-real-time) deadline)
+                                            (return nil))
+                                          (nerimux::%drain-main-thread-callbacks)
+                                          (sleep 0.01))
+                                 nerimux::*workspace-catalog-loaded-p*))
+                             "empty GHQ catalog attach")
+                            (progn
+                              (expect (null (nerimux/vcs:workspace-organizations)))
+                              (expect (zerop
+                                       (hash-table-count nerimux::*workspace-operation-jobs*))))
+                            (multiple-value-bind (type payload)
+                                (nerimux/protocol:decode-frame
+                                 (nerimux::%render-client-frame session conn))
+                              (expect (= nerimux::+msg-frame+ type))
+                              (let ((visible
+                                      (strip-sgr (nerimux/protocol:decode-text payload))))
+                                (expect (search root visible))
+                                (expect (search "ghq get <owner>/<repo>" visible))
+                                (expect (search ":clone <url>" visible)))))
+                       (if conn
+                           (nerimux::%drop-client conn)
+                           (nerimux/net:close-socket server-socket))
+                       (nerimux/net:close-socket client)))))
+            (sb-posix:rmdir root))))))
   (it "opens assignment on Enter without spawning and cancels existing rows without deletion"
     (%with-assignment-fixture
       (let ((spawns 0) (deletes 0))
@@ -105,6 +187,80 @@
                      (nerimux::client-conn-workspace-assignment conn))))
         (expect (string= "worktree ready: /tmp/assignment.git/.worktrees/new"
                          (first (nerimux::client-conn-message-log conn)))))))
+  (it "shows ready immediately after real w c"
+    (%with-global-main-thread-callback-queue
+      (nerimux/test/vcs::%call-with-worktree-path-repository
+        (lambda (repository root)
+          (declare (ignore root))
+          (with-fake-session (session)
+            (let* ((organization
+                     (nerimux/workspace-model:make-organization
+                      :id "assignment-real-git-org"
+                      :host "workspace-owner"
+                      :name "path-fixture"))
+                   (conn (%make-test-conn :rows 24 :cols 320))
+                   (nerimux/vcs::*workspace-organizations* (list organization))
+                   (nerimux::*clients* (list conn)))
+              (nerimux/workspace-model:organization-add-repository
+               organization repository)
+              (setf (nerimux::client-conn-view conn) :repolist)
+              (nerimux::%set-client-selected-tree-object conn repository)
+              (with-stubbed-fdefinition
+                  ((nerimux/pane::%fork-pane
+                    (lambda (fork-session id x y cols rows &key start-dir default-command)
+                      (declare (ignore fork-session default-command))
+                      (let ((pane (make-no-pty-pane id x y cols rows)))
+                        (setf (nerimux/pane:pane-fd pane) 9999
+                              (nerimux/pane:pane-start-path pane) start-dir)
+                        pane)))
+                   (nerimux::start-reader-thread
+                    (lambda (pane) (declare (ignore pane)) nil)))
+                (nerimux::%handle-multi-key-message session conn #(119))
+                (expect (eq :transient (nerimux::client-conn-modal conn)))
+                (nerimux::%handle-multi-key-message session conn #(99))
+                (nerimux/test/vcs::%wait-for-test-worker
+                 (lambda (timeout-seconds)
+                   (let ((deadline
+                           (+ (get-internal-real-time)
+                              (round (* timeout-seconds
+                                        internal-time-units-per-second)))))
+                     (loop
+                       do (nerimux::%drain-main-thread-callbacks)
+                          (when (member
+                                 (nerimux::workspace-assignment-phase
+                                  (nerimux::client-conn-workspace-assignment conn))
+                                 '(:done :retained))
+                            (return t))
+                          (when (>= (get-internal-real-time) deadline)
+                            (return nil))
+                          (sleep 0.01))))
+                 "w c real detached-worktree creation")
+                (let* ((worktree (nerimux::client-conn-selected-worktree conn))
+                       (path (nerimux/workspace-model:worktree-path worktree))
+                       (pane (nerimux::client-conn-focus conn))
+                       (ready-message
+                         (format nil "worktree ready: ~A"
+                                 (nerimux::%worktree-display-path path))))
+                  (expect worktree)
+                  (expect (eq :done
+                              (nerimux::workspace-assignment-phase
+                               (nerimux::client-conn-workspace-assignment conn))))
+                  (expect (eq :pane (nerimux::client-conn-view conn)))
+                  (expect (probe-file path))
+                  (expect (string= "true"
+                                   (nerimux/test/vcs::%fetch-test-git
+                                    path "rev-parse" "--is-inside-work-tree")))
+                  (expect (eq pane (nerimux::client-conn-focus conn)))
+                  (expect (string= path (nerimux/pane:pane-start-path pane)))
+                  (expect (string= ready-message
+                                   (first (nerimux::client-conn-message-log conn))))
+                  (multiple-value-bind (type payload)
+                      (nerimux/protocol:decode-frame
+                       (nerimux::%render-client-frame session conn))
+                    (expect (= nerimux::+msg-frame+ type))
+                    (let ((visible
+                            (strip-sgr (nerimux/protocol:decode-text payload))))
+                      (expect (search ready-message visible))))))))))))
   (it "uses w n for detached creation and a for an existing workspace"
     (%with-assignment-fixture
       (let ((created 0) (selected nil))
