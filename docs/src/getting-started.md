@@ -401,8 +401,8 @@ to hold them all drops the least important first:
 | `now`, `Nm`, `Nh`, `Nd` | How long ago a pane under this worktree last produced output or held focus |
 | `+A`, `−D` | Added and deleted lines; each half is omitted when it is zero |
 | `↑N`, `↓N` | Commits ahead of and behind the upstream branch |
-| `1 shell`, `N shells` | Non-agent panes open in this worktree |
-| `exited` | One of its panes has lost its process |
+| `1 shell`, `N shells` | Non-agent panes in this worktree, including panes whose processes have exited |
+| `(N exited)` | Number of non-agent panes whose processes have exited, shown separately from the total shell count |
 | `completed` | The workspace is marked complete |
 | `agent RUNNING`, `agent WAITING`, `agent EXITED` | The agent's lifecycle; absent when no agent has run here |
 | `dirty`, `conflict` | The Git state. `missing`, `locked`, and `prunable` share this slot and take precedence over `dirty`/`conflict`; a clean worktree shows no state word |
@@ -427,7 +427,8 @@ repository or organization row carries `!` when anything beneath it does.
 Process exit or a BEL or recognized terminal notification marks an agent
 `WAITING`; focusing its pane clears that state. Unread output on an
 unfocused pane marks that pane, and leaves its worktree under Active rather
-than moving it to Attention.
+than moving it to Attention. `agent EXITED` reports the agent lifecycle;
+`exited` on an expanded pane row reports that pane's process state.
 
 A pane row names what it runs, the agent or `shell`, and adds `exited` once
 its process is gone. A changed-file row names its state as a word, `modified`,
