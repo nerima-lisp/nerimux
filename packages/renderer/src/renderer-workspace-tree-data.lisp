@@ -188,7 +188,8 @@
   (case kind
     (:organization (organization-missing-p object))
     (:repository (repository-missing-p object))
-    (:worktree (worktree-missing-p object))
+    (:worktree (or (worktree-missing-p object)
+                   (nerimux/workspace-model:worktree-read-error-p object)))
     (t nil)))
 
 (defun %workspace-tree-node-mark (object kind)
@@ -314,19 +315,18 @@
 
 (defun %worktree-state-tag (worktree)
   "The single most salient %WORKTREE-STATUS-TOKENS entry for the info
-   cluster, excluding AHEAD/BEHIND (those get their own cluster field so
-   would otherwise show twice). Falls back to \"CLEAN\" when every token
-   present is an AHEAD/BEHIND count, matching %WORKTREE-STATUS-TOKENS'S own
-   CLEAN-when-nothing-else-applies default."
-  (or
-   (find-if
-    (lambda (token)
-      (not
-       (or (and (>= (length token) 5) (string= (subseq token 0 5) "AHEAD"))
-           (and (>= (length token) 6) (string= (subseq token 0 6) "BEHIND"))
-           (and (plusp (length token)) (char= (char token 0) #\+)))))
-    (%worktree-status-tokens worktree))
-   "CLEAN"))
+   cluster, excluding AHEAD/BEHIND. A conflict wins when both DIRTY and
+   CONFLICT are present. Falls back to \"CLEAN\" when no health token applies."
+  (let ((tokens (%worktree-status-tokens worktree)))
+    (or (find "CONFLICT" tokens :test #'string=)
+        (find-if
+         (lambda (token)
+           (not
+            (or (and (>= (length token) 5) (string= (subseq token 0 5) "AHEAD"))
+                (and (>= (length token) 6) (string= (subseq token 0 6) "BEHIND"))
+                (and (plusp (length token)) (string= (subseq token 0 1) "+")))))
+         tokens)
+        "CLEAN")))
 
 (defun %worktree-git-state-text (worktree)
   "WORKTREE's Git state as a lowercase word, or NIL when it is clean -- the
