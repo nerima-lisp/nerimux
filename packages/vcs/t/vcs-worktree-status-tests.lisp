@@ -192,8 +192,10 @@
                                        (expect (= 1 calls))
                                        (expect (= 1 (length actual-commits)))
                                        (expect (string= subject
-                                                        (vcs-kit:vcs-commit-message
-                                                         (first actual-commits))))
+                                                        (string-right-trim
+                                                         (list #\Newline #\Return)
+                                                         (vcs-kit:vcs-commit-message
+                                                          (first actual-commits)))))
                                        (expect (eq :ready
                                                    (nerimux/workspace-model:worktree-commits-state
                                                     worktree)))
