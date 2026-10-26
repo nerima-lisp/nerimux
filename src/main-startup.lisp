@@ -71,6 +71,7 @@
    %parse-global-cli-argv already reports a malformed global flag: a one-line
    message on *error-output* and exit 1, never the raw SBCL debugger, which
    the saved core would otherwise drop a real user into."
+  (uiop:setup-temporary-directory)
   (let ((*print-circle* t)
         (invocation (%parse-global-cli-argv (%application-argv))))
     (if (null invocation)
