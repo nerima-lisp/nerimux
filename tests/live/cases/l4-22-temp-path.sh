@@ -27,6 +27,16 @@ if [[ $(basename -- "$0") == ghq ]]; then
       printf 'TMPDIR_WRITABLE=no\n' >> "$log"
       exit 88
     fi
+    stdout="$GHQ_ROOT/.l4-22-ghq-stdout.txt"
+    stderr="$GHQ_ROOT/.l4-22-ghq-stderr.txt"
+    if "$0.real" "$@" >"$stdout" 2>"$stderr"; then
+      status=0
+    else
+      status=$?
+    fi
+    cat "$stdout"
+    cat "$stderr" >&2
+    exit "$status"
   fi
   exec "$0.real" "$@"
 fi
@@ -45,6 +55,7 @@ lane=L8
 live_base=${LIVE_BASE_TMPDIR:-${TMPDIR:-/tmp}/nmx-live}
 lane_root="$live_base/$lane"
 evidence="$lane_root/evidence/cases"
+dns_pattern='Could not resolve hostname|nodename nor servname|Name or service not known|Temporary failure in name resolution'
 mkdir -p "$lane_root/fixtures" "$evidence"
 fixture_parent=$(mktemp -d "$lane_root/fixtures/l4-22.XXXXXX")
 "$repo_root/tests/live/fixtures/generate-empty.sh" "$fixture_parent" >"$evidence/L4-22-fixture.log"
@@ -90,9 +101,13 @@ trap cleanup EXIT
 "$harness" keys "$lane" : 'clone git@example.invalid:org/repo' Enter
 "$harness" wait-for "$lane" 'repo failed:' 30
 "$harness" snap "$lane" L4-22-after-failure
+"$harness" resize "$lane" 500 45
+"$harness" snap "$lane" L4-22-dns-failure
 
 app_trace="$fixture_root/ghq/.l4-22-app-env.txt"
 trace="$fixture_root/ghq/.l4-22-ghq-child-env.txt"
+ghq_stdout="$fixture_root/ghq/.l4-22-ghq-stdout.txt"
+ghq_stderr="$fixture_root/ghq/.l4-22-ghq-stderr.txt"
 lane_tmp=$(cd -- "$lane_root/tmp" && pwd -P)
 cp "$app_trace" "$evidence/L4-22-app-env.txt"
 if [[ -f $trace ]]; then
@@ -105,6 +120,7 @@ fi
 grep -Fqx "TMPDIR=$lane_tmp" "$app_trace"
 grep -Fqx "GHQ_ROOT=$fixture_root/ghq" "$app_trace"
 pane="$lane_root/evidence/snapshots/L4-22-after-failure/pane.txt"
+dns_pane="$lane_root/evidence/snapshots/L4-22-dns-failure/pane.txt"
 [[ -s $trace ]] || { printf 'ghq child environment was not captured\n' >&2; exit 1; }
 if ! grep -Fq "arguments= get --bare --" "$trace"; then
   {
@@ -126,10 +142,19 @@ if ! grep -Fq "arguments= get --bare --" "$trace"; then
   cat "$pane" >&2
   exit 1
 fi
+cp "$ghq_stdout" "$evidence/L4-22-ghq-stdout.txt"
+cp "$ghq_stderr" "$evidence/L4-22-ghq-stderr.txt"
 grep -Fqx "TMPDIR=$lane_tmp" "$trace"
 grep -Fqx "GHQ_ROOT=$fixture_root/ghq" "$trace"
 grep -Fqx 'TMPDIR_WRITABLE=yes' "$trace"
 grep -Fq 'git@example.invalid:org/repo' "$trace"
+if ! grep -Eq "$dns_pattern" "$evidence/L4-22-ghq-stderr.txt"; then
+  cat "$evidence/L4-22-ghq-stderr.txt" >&2
+  printf 'ghq did not report a DNS resolution failure\n' >&2
+  exit 1
+fi
+"$harness" wait-for "$lane" "$dns_pattern" 10
+"$harness" snap "$lane" L4-22-dns-failure
 
 if ! grep -Fq 'repo failed:' "$pane"; then
   cat "$pane" >&2
@@ -141,9 +166,9 @@ if ! grep -Fq 'example.invalid/org' "$pane"; then
   printf 'failed repository row was not rendered\n' >&2
   exit 1
 fi
-if ! grep -Fq 'ssh:' "$pane"; then
-  cat "$pane" >&2
-  printf 'clone did not report an SSH failure\n' >&2
+if ! grep -Eq "$dns_pattern" "$dns_pane"; then
+  cat "$dns_pane" >&2
+  printf 'clone did not display a DNS resolution failure\n' >&2
   exit 1
 fi
 if [[ -e "$fixture_root/ghq/example.invalid/org/repo.git" ]]; then

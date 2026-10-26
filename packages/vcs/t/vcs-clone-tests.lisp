@@ -447,3 +447,14 @@
              nil (make-string 181 :initial-element #\x) 128)))
       (expect (= 180 (length reason)))
       (expect (string= (make-string 180 :initial-element #\x) reason))))))
+
+(describe "vcs clone DNS error formatting"
+  (it "prefers the SSH resolution diagnostic over ghq command output"
+    (expect
+     (string=
+      "ssh: Could not resolve hostname example.invalid: nodename nor servname provided, or not known"
+      (nerimux/vcs::%clone-error-reason
+       nil
+       (format nil
+               "clone ssh://git@example.invalid/org/repo -> /tmp/repo.git~%git clone --recursive --bare ssh://git@example.invalid/org/repo /tmp/repo.git~%Cloning into bare repository /tmp/repo.git...~%ssh: Could not resolve hostname example.invalid: nodename nor servname provided, or not known~%fatal: Could not read from remote repository.~%Please make sure you have the correct access rights and the repository exists.")
+       128)))))
