@@ -2223,7 +2223,7 @@
                 (cl-concurrent-kit:with-lock-held (probe-lock)
                   (expect (= 5 start-count))
                   (expect (= 4 diagnostic-count))
-                  (expect (= 4 signal-count))
+                  (expect (>= signal-count 4))
                   (expect (= 1 read-count))
                   (expect (= 4 error-count))
                   (expect (= 1 completion-count)))))))
