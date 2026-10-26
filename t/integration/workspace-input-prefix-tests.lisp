@@ -1153,4 +1153,47 @@
                              (nerimux/pane:pane-window pane)))
                        (nerimux/window:window-panes target-window)))
         (expect (eq zoomed (nerimux::client-conn-focus conn-b))))))
+  (it "g3-previous-pane-from-peer-close-notifies-after-dispatched-toggle"
+    (with-fake-two-pane-session (session)
+      (let* ((conn-a (%make-test-conn))
+             (conn-b (%make-test-conn))
+             (window (first (nerimux/session:session-windows session)))
+             (panes (nerimux/window:window-panes window))
+             (previous (first panes))
+             (current (second panes))
+             (dispatches nil)
+             (original-dispatch
+               (fdefinition (quote nerimux::%workspace-prefix-dispatch)))
+             (nerimux::*clients* (list conn-a conn-b)))
+        (setf (nerimux/pane:pane-fd previous) -1)
+        (nerimux::%set-client-focus conn-a previous)
+        (nerimux::%set-client-focus conn-a current)
+        (expect (eq previous
+                    (sb-ext:weak-pointer-value
+                     (nerimux::client-conn-previous-pane conn-a))))
+        (nerimux::%set-client-focus conn-b previous)
+        (with-stubbed-fdefinition
+            ((nerimux::%workspace-prefix-dispatch
+              (lambda (session conn byte)
+                (push (list conn byte) dispatches)
+                (funcall original-dispatch session conn byte))))
+          (nerimux::%handle-multi-key-message session conn-b #(17))
+          (nerimux::%handle-multi-key-message session conn-b #(120))
+          (expect (null (nerimux/pane:pane-window previous)))
+          (expect (not (member previous
+                               (nerimux/window:window-panes window)
+                               :test (function eq))))
+          (nerimux::%handle-multi-key-message session conn-a #(17))
+          (nerimux::%handle-multi-key-message session conn-a #(59)))
+        (expect (some (lambda (dispatch)
+                        (and (eq conn-a (first dispatch))
+                             (= 59 (second dispatch))))
+                      dispatches))
+        (expect (eq current (nerimux::client-conn-focus conn-a)))
+        (expect (eq window (nerimux/pane:pane-window current)))
+        (expect (member current (nerimux/window:window-panes window)
+                        :test (function eq)))
+        (expect (null (nerimux::client-conn-previous-pane conn-a)))
+        (expect (search "no previous pane"
+                        (first (nerimux::client-conn-message-log conn-a)))))))
   )
