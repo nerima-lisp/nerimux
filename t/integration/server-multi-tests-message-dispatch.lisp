@@ -635,7 +635,7 @@
             (expect (search "Scrollback" visible))
             (expect (null (search "Modes" visible))))))))
 
-  (it "opening a confirm-view while modal is :help replaces it outright"
+  (it "opening a confirm-view while modal is :help keeps it underneath"
     (with-fake-session (s)
       (let* ((conn (%make-test-conn :rows 40 :cols 110))
              (nerimux::*clients* (list conn)))
@@ -649,10 +649,10 @@
           (declare (ignore type))
           (let ((visible (strip-sgr (nerimux/protocol::decode-text payload))))
             (expect (search "WORKTREE DELETE" visible))
-            (expect (not (search "Prefix C-q" visible)))))
+            (expect (search "Prefix C-q" visible))))
         (nerimux::%handle-multi-key-message s conn #(110))
         (expect (not (nerimux::client-conn-confirm-view conn)))
-        (expect (null (nerimux::client-conn-modal conn))))))
+        (expect (eq :help (nerimux::client-conn-modal conn))))))
 
   (it "?-reaches-a-focused-pane-directly-in-pane-view-instead-of-opening-the-transient"
     (with-fake-session (s)

@@ -161,6 +161,7 @@
   (viewport 0 :type fixnum)
   (view :repolist)
   (modal nil)
+  (modal-underlay nil)
   (transient-arguments nil)
   (transient-view nil)
   (read-view nil)

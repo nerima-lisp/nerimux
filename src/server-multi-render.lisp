@@ -521,7 +521,11 @@
                (client-conn-confirm-view conn)
                (client-conn-rows conn)
                (client-conn-cols conn)
-               (%render-client-view-frame session conn)))
+               (if (eq (client-conn-modal-underlay conn) :help)
+                   (render-help-view-to-tui-string
+                    (client-conn-rows conn)
+                    (client-conn-cols conn))
+                   (%render-client-view-frame session conn))))
              (:help
               (render-help-view-to-tui-string
                (client-conn-rows conn)

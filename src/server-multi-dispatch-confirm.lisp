@@ -72,8 +72,8 @@
    OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body, to
    which this adds, for git clean, the file list read while the box is
    already up. CLEAN-PREVIEW-ARGS can limit that list to selected paths. The
-   keys that answer the box are the prompt line's job (%CONFIRM-VIEW-PROMPT-LINE),
-   not a field repeating them above it."
+   prompt line (%CONFIRM-VIEW-PROMPT-LINE) names the keys that answer the box.
+   If Help is open, retain it underneath the confirmation."
   (let* ((clean-p (%confirm-clean-preview-p operation))
          (view (nerimux/renderer:make-confirm-view
                 :operation operation
@@ -82,18 +82,23 @@
                 :prompt-p t)))
     (setf (client-conn-confirm-view conn) view
           (client-conn-confirm-action conn) action
-          (client-conn-confirm-cancel-action conn) on-cancel)
+          (client-conn-confirm-cancel-action conn) on-cancel
+          (client-conn-modal-underlay conn)
+          (and (eq (client-conn-modal conn) :help) :help))
     (%set-client-modal conn :confirm)
     (when clean-p
       (%request-confirm-clean-preview conn view clean-preview-args))
     nil))
 
 (defun %close-confirm-view (conn)
-  "Take the confirmation down and forget its pending action."
-  (setf (client-conn-confirm-view conn) nil
-        (client-conn-confirm-action conn) nil
-        (client-conn-confirm-cancel-action conn) nil)
-  (%set-client-modal conn nil))
+  "Take the confirmation down, forget its pending action, and restore its
+   underlay."
+  (let ((underlay (client-conn-modal-underlay conn)))
+    (setf (client-conn-confirm-view conn) nil
+          (client-conn-confirm-action conn) nil
+          (client-conn-confirm-cancel-action conn) nil
+          (client-conn-modal-underlay conn) nil)
+    (%set-client-modal conn underlay)))
 
 (defun %cancel-confirm-view (conn)
   "Answer the confirmation with no, whichever cancel key was struck."
