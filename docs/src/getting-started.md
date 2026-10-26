@@ -67,8 +67,8 @@ scan. While the initial scan is
 still running, attaching shows a placeholder screen (`scanning workspaces...`,
 with a running repository count once the scan has found any) instead of an
 empty tree; if the ghq root has no repositories at all once the scan
-finishes, the repolist view shows that directly with the ghq root path and a
-`ghq get <owner>/<repo>` hint, rather than a permanently empty tree.
+finishes, the repolist view shows the ghq root path and both ways to add the
+first repository: `ghq get <owner>/<repo>` or `:clone <url>`.
 
 If `nerimux` has to auto-start the server because no server was already running
 for the target session, it prints `nerimux: starting server...` to stderr before
@@ -464,7 +464,7 @@ C-q d detach`.
 Anything nerimux has to say about a key you pressed, a refusal, a git write, or
 a worktree it created, appears on the 1-line message strip. In the pane view
 the same text takes over the right-hand side of the status bar, so a refused
-split or a `worktree created: <path>` line is visible there too; a long path
+split or a `worktree ready: <path>` line is visible there too; a long path
 is elided from the left.
 
 A message stays until the next key you press, until you change view, or for
