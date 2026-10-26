@@ -84,7 +84,7 @@
        (declare (ignore ignored))
        (let* ((source (concatenate 'string root "source/"))
               (older (concatenate 'string root "20260101T000000-abcdef0/"))
-              (newer (concatenate 'string root "20260102T000000-bcdef01/"))
+              (newer (concatenate 'string root "20260102T000000-bcdef01"))
               (previous (nerimux/vcs:workspace-organizations))
               (entry
                 (vcs-kit:make-ghq-repository-entry

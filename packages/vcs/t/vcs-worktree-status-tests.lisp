@@ -163,17 +163,17 @@
                                         (conn
                                          (nerimux::%make-client-conn :rows 30 :cols 160))
                                         (initial-frame
-                                         (uiop:symbol-call :nerimux "%render-client-frame"
+                                         (uiop:symbol-call :nerimux '#:%render-client-frame
                                                            session conn)))
                                    (expect initial-frame)
                                    (expect (= 2 (uiop:symbol-call
-                                                 :nerimux "client-conn-visibility-level" conn)))
-                                   (uiop:symbol-call :nerimux "%handle-multi-key-message"
+                                                 :nerimux '#:client-conn-visibility-level conn)))
+                                   (uiop:symbol-call :nerimux '#:%handle-multi-key-message
                                                      session conn #(52))
                                    (expect (= 4 (uiop:symbol-call
-                                                 :nerimux "client-conn-visibility-level" conn)))
+                                                 :nerimux '#:client-conn-visibility-level conn)))
                                    (let ((loading-frame
-                                          (uiop:symbol-call :nerimux "%render-client-frame"
+                                          (uiop:symbol-call :nerimux '#:%render-client-frame
                                                             session conn)))
                                      (expect (sb-thread:wait-on-semaphore entered :timeout 5))
                                      (expect (search "commits: loading..."
@@ -184,10 +184,10 @@
                                      (sb-thread:signal-semaphore release)
                                      (setf released-p t)
                                      (cl-concurrent-kit:join-thread worker :timeout 10)
-                                     (uiop:symbol-call :nerimux "%drain-main-thread-callbacks")
+                                     (uiop:symbol-call :nerimux '#:%drain-main-thread-callbacks)
                                      (let ((ready-text
                                             (frame-text
-                                             (uiop:symbol-call :nerimux "%render-client-frame"
+                                             (uiop:symbol-call :nerimux '#:%render-client-frame
                                                                session conn))))
                                        (expect (= 1 calls))
                                        (expect (= 1 (length actual-commits)))
@@ -203,7 +203,7 @@
                                  (when worker
                                    (ignore-errors (cl-concurrent-kit:join-thread worker :timeout 10))
                                    (ignore-errors
-                                    (uiop:symbol-call :nerimux "%drain-main-thread-callbacks")))
+                                    (uiop:symbol-call :nerimux '#:%drain-main-thread-callbacks)))
                                  (nerimux/vcs:set-workspace-organizations previous-organizations))))
                           (when (probe-file root)
                             (uiop:delete-directory-tree root :validate t :if-does-not-exist :ignore)))))))
