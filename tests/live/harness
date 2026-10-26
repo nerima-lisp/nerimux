@@ -233,7 +233,8 @@ start_app() {
 }
 
 send_keys() {
-  local lane=$1 fixture_root dir socket
+  local lane=$1 fixture_root dir socket key
+  local -a pending_keys=()
   check_lane "$lane"
   (( $# >= 2 )) || fail "keys requires at least one key"
   shift
@@ -246,7 +247,21 @@ send_keys() {
     printf '%q ' "$@"
     printf '\n'
   } >> "$dir/evidence/keys.log"
-  run_tmux "$lane" "$fixture_root" "$socket" send-keys -t app:0.0 "$@"
+  for key in "$@"; do
+    if [[ $key == ';' ]]; then
+      if ((${#pending_keys[@]} > 0)); then
+        run_tmux "$lane" "$fixture_root" "$socket" send-keys -t app:0.0 "${pending_keys[@]}"
+        pending_keys=()
+      fi
+      # A bare semicolon terminates tmux's command; send its byte value.
+      run_tmux "$lane" "$fixture_root" "$socket" send-keys -H -t app:0.0 3b
+    else
+      pending_keys+=("$key")
+    fi
+  done
+  if ((${#pending_keys[@]} > 0)); then
+    run_tmux "$lane" "$fixture_root" "$socket" send-keys -t app:0.0 "${pending_keys[@]}"
+  fi
 }
 
 save_snapshot() {
