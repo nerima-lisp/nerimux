@@ -12,13 +12,12 @@
                 :id "repo" :organization organization
                 :specification "github.com/team/repo"))
              (worktree
-               ;; u writes only for a staged path and s only for one with
-               ;; worktree changes left, so this path carries both.
                (nerimux/workspace-model:make-worktree
                 :id "wt-crash-guard" :repository repository
                 :path "/tmp/wt-crash-guard" :branch "main"
                 :staged-files '(("M" . "src/foo.lisp"))
-                :unstaged-files '(("M" . "src/foo.lisp"))))
+                :unstaged-files '(("M" . "src/foo.lisp"))
+                :unmerged-files '(("UU" . "conflict.txt"))))
              (conn (%make-test-conn))
              (nerimux::*clients* (list conn))
              (nerimux/vcs::*workspace-organizations* (list organization))
@@ -38,11 +37,46 @@
                 t)))
           (dolist (key '("S" "U"))
             (finishes (nerimux::%handle-multi-key-message s conn key)))
-          (dolist (key '("s" "u" "k"))
+          (let ((calls-before (length calls)))
+            (dolist (key '("s" "u" "k"))
+              (nerimux::%set-client-selected-tree-object conn :unstaged)
+              (finishes (nerimux::%handle-multi-key-message s conn key))
+              (expect (string= "select a file first"
+                               (first (nerimux::client-conn-message-log conn))))
+              (expect (= calls-before (length calls)))))
+          (let ((calls-before (length calls)))
             (nerimux::%set-client-selected-tree-object
-             conn (list :file "wt-crash-guard" "src/foo.lisp" " M"))
-            (finishes (nerimux::%handle-multi-key-message s conn key))))
-        (expect (= 4 (length calls)))
+             conn (list :file "wt-crash-guard" "conflict.txt" "UU" :unmerged))
+            (finishes (nerimux::%handle-multi-key-message s conn "s"))
+            (expect (= (1+ calls-before) (length calls)))
+            (expect (equal (list repository :add (list "--" "conflict.txt"))
+                           (first calls)))
+            (nerimux::%set-client-selected-tree-object
+             conn (list :file "wt-crash-guard" "conflict.txt" "UU" :unmerged))
+            (finishes (nerimux::%handle-multi-key-message s conn "u"))
+            (expect (= (1+ calls-before) (length calls)))
+            (expect (string= "nothing to unstage"
+                             (first (nerimux::client-conn-message-log conn))))
+            (nerimux::%set-client-selected-tree-object
+             conn (list :file "wt-crash-guard" "conflict.txt" "UU" :unmerged))
+            (finishes (nerimux::%handle-multi-key-message s conn "k"))
+            (expect (string= "git restore -- conflict.txt"
+                             (nerimux/renderer:confirm-view-operation
+                              (nerimux::client-conn-confirm-view conn))))
+            (expect (= (1+ calls-before) (length calls)))
+            (nerimux::%handle-multi-key-message s conn "y")
+            (expect (= (+ calls-before 2) (length calls)))
+            (expect (equal (list repository :restore (list "--" "conflict.txt"))
+                           (first calls)))
+            (expect (equal (list repository :add (list "--" "conflict.txt"))
+                           (second calls))))
+          (dolist (selection '((:unstaged "s") (:staged "u")
+                               (:unstaged "k")))
+            (destructuring-bind (section key) selection
+              (nerimux::%set-client-selected-tree-object
+               conn (list :file "wt-crash-guard" "src/foo.lisp" " M" section))
+              (finishes (nerimux::%handle-multi-key-message s conn key)))))
+        (expect (= 6 (length calls)))
         (expect (every (lambda (call) (eq repository (first call))) calls))
         (expect (eq :confirm (nerimux::client-conn-modal conn)))))))
 
@@ -70,7 +104,7 @@
         (setf (nerimux::client-conn-view conn) :status
               (nerimux::client-conn-selected-worktree conn) worktree)
         (nerimux::%set-client-selected-tree-object
-         conn (list :file "wt-discard-confirm" "src/foo.lisp" " M"))
+         conn (list :file "wt-discard-confirm" "src/foo.lisp" " M" :unstaged))
         (with-stubbed-fdefinition
             ((nerimux/vcs:vcs-package-available-p (lambda () nil))
              (nerimux/vcs:git-write-operation-async
@@ -86,7 +120,7 @@
           (expect (nerimux::client-conn-confirm-action conn))
           (nerimux::%handle-multi-key-message s conn "y")
           (expect (null (nerimux::client-conn-modal conn)))
-          (expect (equal (list (list repository :restore (list "--" "src/foo.lisp")))
+          (expect (equal (list (list repository :restore (list "--worktree" "--" "src/foo.lisp")))
                          calls)))))))
 
 (defun %make-status-selection-fixture (&key staged unstaged untracked)
@@ -111,24 +145,26 @@
           (nerimux::client-conn-selected-worktree conn) worktree)
     (values organization repository worktree conn)))
 
-(defun %select-status-file-row (conn path code)
+(defun %select-status-file-row (conn section path code)
   "Select PATH's file row the way the status view does -- through
    SELECTED-TREE-OBJECT alone, so SELECTED-WORKTREE keeps naming the view's
    own worktree."
   (setf (nerimux::client-conn-selected-tree-object conn)
-        (list :file "wt-status" path code)))
+        (list :file "wt-status" path code section)))
 
 (describe "status-view-write-selection-suite"
 
   (it "discards a staged change from the index and the worktree"
     (with-fake-session (s)
       (multiple-value-bind (organization repository worktree conn)
-          (%make-status-selection-fixture :staged '(("M" . "a.txt")))
+          (%make-status-selection-fixture
+           :staged '(("M" . "a.txt"))
+           :unstaged '(("M" . "a.txt")))
         (declare (ignore worktree))
         (let ((nerimux::*clients* (list conn))
               (nerimux/vcs::*workspace-organizations* (list organization))
               (calls nil))
-          (%select-status-file-row conn "a.txt" "M")
+          (%select-status-file-row conn :staged "a.txt" "M")
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () nil))
                (nerimux/vcs:git-write-operation-async
@@ -159,9 +195,9 @@
         (let ((nerimux::*clients* (list conn))
               (nerimux/vcs::*workspace-organizations* (list organization))
               (calls nil))
-          (%select-status-file-row conn "untracked.txt" "??")
+          (%select-status-file-row conn :untracked "untracked.txt" "??")
           (with-stubbed-fdefinition
-              ((nerimux/vcs:vcs-package-available-p (lambda () nil))
+              ((nerimux/vcs:vcs-package-available-p (lambda () t))
                (nerimux/vcs:git-write-operation-async
                 (lambda (received-repository operation arguments
                                              &key callback-dispatch on-complete on-error working-directory)
@@ -170,7 +206,7 @@
                   (when on-complete (funcall on-complete t ""))
                   t)))
             (nerimux::%handle-multi-key-message s conn "k")
-            (expect (string= "delete untracked file"
+            (expect (string= "git clean -fd -- untracked.txt"
                              (nerimux/renderer:confirm-view-operation
                               (nerimux::client-conn-confirm-view conn))))
             (expect (equal (cons "path" "untracked.txt")
@@ -178,11 +214,16 @@
                                   (nerimux/renderer:confirm-view-fields
                                    (nerimux::client-conn-confirm-view conn))
                                   :test #'string=)))
+            (expect (equal (list (list repository :clean
+                                       (list "-n" "-d" "--" "untracked.txt")))
+                           calls))
             (nerimux::%handle-multi-key-message s conn "y")
-            (expect (equal (list (list repository
-                                       :clean
-                                       (list "-fd" "--" "untracked.txt")))
-                           calls)))))))
+            (expect (equal
+                     (list (list repository :clean
+                                 (list "-n" "-d" "--" "untracked.txt"))
+                           (list repository :clean
+                                 (list "-fd" "--" "untracked.txt")))
+                     (reverse calls))))))))
 
   (it "refuses to unstage a file that was never staged"
     (with-fake-session (s)
@@ -193,7 +234,7 @@
         (let ((nerimux::*clients* (list conn))
               (nerimux/vcs::*workspace-organizations* (list organization))
               (calls nil))
-          (%select-status-file-row conn "untracked.txt" "??")
+          (%select-status-file-row conn :untracked "untracked.txt" "??")
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () nil))
                (nerimux/vcs:git-write-operation-async
@@ -211,12 +252,14 @@
   (it "reports a row that is already staged instead of staging it again"
     (with-fake-session (s)
       (multiple-value-bind (organization repository worktree conn)
-          (%make-status-selection-fixture :staged '(("A" . "new.txt")))
-        (declare (ignore repository worktree))
+          (%make-status-selection-fixture
+           :staged '(("A" . "new.txt"))
+           :unstaged '(("M" . "new.txt")))
+        (declare (ignore worktree))
         (let ((nerimux::*clients* (list conn))
               (nerimux/vcs::*workspace-organizations* (list organization))
               (calls nil))
-          (%select-status-file-row conn "new.txt" "A")
+          (%select-status-file-row conn :staged "new.txt" "A")
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () nil))
                (nerimux/vcs:git-write-operation-async
@@ -230,12 +273,22 @@
             (expect (null calls))
             (expect (string= "already staged"
                              (first (nerimux::client-conn-message-log conn))))
-            (%select-status-file-row conn "new.txt" "A")
+            (nerimux::%handle-multi-key-message s conn "u")
+            (expect
+             (equal (list repository :restore
+                          (list "--staged" "--" "new.txt"))
+                    (first calls)))
+            (%select-status-file-row conn :unstaged "new.txt" "M")
             (setf (nerimux/workspace-model:worktree-unstaged-files
                    (nerimux::client-conn-selected-worktree conn))
                   '(("M" . "new.txt")))
             (nerimux::%handle-multi-key-message s conn "s")
-            (expect (= 1 (length calls))))))))
+            (expect (= 2 (length calls)))
+            (expect
+             (equal (list (list repository :add (list "--" "new.txt"))
+                          (list repository :restore
+                                (list "--staged" "--" "new.txt")))
+                    calls)))))))
 
   (it "runs a transient git action from the status view's own worktree"
     (with-fake-session (s)
@@ -245,7 +298,7 @@
         (let ((nerimux::*clients* (list conn))
               (nerimux/vcs::*workspace-organizations* (list organization))
               (calls nil))
-          (%select-status-file-row conn "g.txt" "M")
+          (%select-status-file-row conn :unstaged "g.txt" "M")
           (with-stubbed-fdefinition
               ((nerimux/vcs:vcs-package-available-p (lambda () t))
                (nerimux::%refresh-client-picker
@@ -382,7 +435,7 @@
            (setf (nerimux::client-conn-view conn) :status
                  (nerimux::client-conn-selected-worktree conn) worktree)
            (nerimux::%set-client-selected-tree-object
-            conn (list :file "wt-real-status" path " M"))
+            conn (list :file "wt-real-status" path " M" :unstaged))
            (with-stubbed-fdefinition
                ((cl-concurrent-kit:make-thread
                   (lambda (function &key name)

@@ -121,19 +121,18 @@
                                                 (gethash (list worktree-id path)
                                                          file-diffs))))))
 
-(defun %workspace-status-file-entries (files worktree-id
+(defun %workspace-status-file-entries (files section worktree-id
                                              level
                                              expanded-node-ids
                                              file-diffs
                                              diff-default-p)
-  "One LEVEL entry per (CODE . PATH) cons in FILES -- one of WORKTREE's four
-   partitioned change lists (Unit MODEL: staged/unstaged/untracked/unmerged-
-   files) -- each followed by its own inline-diff child rows."
+  "One LEVEL entry per (CODE . PATH) cons in FILES, tagged with SECTION and
+   followed by its inline-diff child rows."
   (loop for (code . path) in files
         append (cons
                 (list level
                       (format nil "~A ~A" (%changed-file-state-text code) path)
-                      (list :file worktree-id path code)
+                      (list :file worktree-id path code section)
                       :file)
                 (%workspace-status-file-diff-child-entries worktree-id
                                                            path
@@ -234,12 +233,11 @@
                                           expanded-node-ids
                                           file-diffs
                                           (visibility-level 2))
-  "The magit-style status buffer's rows for WORKTREE, flattened into (LEVEL
-   LABEL OBJECT KIND) tuples in this fixed section order, each section
-   omitted entirely when it has nothing to show: Head, Unmerged, Untracked,
-   Unstaged, Staged, Stashes, Recent commits, Panes, Worktrees (contract §3).
-   A worktree whose status has not landed yet gets a `loading…` row under
-   Head instead of the sections it has no data for."
+  "The status buffer rows for WORKTREE, flattened into (LEVEL LABEL OBJECT KIND)
+   tuples. File objects carry their source section, in this fixed section
+   order: Head, Unmerged, Untracked, Unstaged, Staged, Stashes, Recent commits,
+   Panes, Worktrees (contract §3). Empty sections are omitted. A worktree
+   whose status has not landed gets a loading row under Head."
   (let* ((level (or visibility-level 2))
          (section-default-p
           (%workspace-status-section-default-expanded-p level))
@@ -247,6 +245,7 @@
          (worktree-id (worktree-id worktree))
          (unmerged-children
           (%workspace-status-file-entries (worktree-unmerged-files worktree)
+                                          :unmerged
                                           worktree-id
                                           1
                                           expanded-node-ids
@@ -254,6 +253,7 @@
                                           diff-default-p))
          (untracked-children
           (%workspace-status-file-entries (worktree-untracked-files worktree)
+                                          :untracked
                                           worktree-id
                                           1
                                           expanded-node-ids
@@ -261,6 +261,7 @@
                                           diff-default-p))
          (unstaged-children
           (%workspace-status-file-entries (worktree-unstaged-files worktree)
+                                          :unstaged
                                           worktree-id
                                           1
                                           expanded-node-ids
@@ -268,6 +269,7 @@
                                           diff-default-p))
          (staged-children
           (%workspace-status-file-entries (worktree-staged-files worktree)
+                                          :staged
                                           worktree-id
                                           1
                                           expanded-node-ids

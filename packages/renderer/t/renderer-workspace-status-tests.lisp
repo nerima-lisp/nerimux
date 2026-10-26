@@ -140,12 +140,13 @@
         (expect (find-if (lambda (e) (search "Stashes (1)" (second e))) headers))
         (expect (find-if (lambda (e) (search "stashes: refreshing..." (second e))) entries)))))
 
-  (it "status view labels use words while preserving raw row codes"
+  (it "status view labels preserve raw codes and source sections"
     (multiple-value-bind (worktree)
         (%build-status-fixture
+         :unmerged '(("UU" . "conflict.txt"))
          :untracked '(("??" . "new.txt"))
-         :unstaged '(("M" . "a.txt"))
-         :staged '(("A" . "b.txt"))
+         :unstaged '(("M" . "shared.txt"))
+         :staged '(("M" . "shared.txt"))
          :commits '(("abc1234" . "one") ("def5678" . "two"))
          :commits-state :ready
          :sibling-p t)
@@ -153,10 +154,15 @@
              (file-entries (remove-if-not
                             (lambda (entry) (eq :file (fourth entry)))
                             entries)))
-        (expect (equal '("untracked new.txt" "modified a.txt" "added b.txt")
-                       (mapcar #'second file-entries)))
-        (expect (equal '("??" "M" "A")
+        (expect
+         (equal '("conflict conflict.txt" "untracked new.txt"
+                  "modified shared.txt" "modified shared.txt")
+                (mapcar #'second file-entries)))
+        (expect (equal '("UU" "??" "M" "M")
                        (mapcar (lambda (entry) (fourth (third entry)))
+                               file-entries)))
+        (expect (equal '(:unmerged :untracked :unstaged :staged)
+                       (mapcar (lambda (entry) (fifth (third entry)))
                                file-entries)))
         (expect (equal (mapcar #'third entries)
                        (nerimux/renderer:workspace-status-objects worktree)))))))
@@ -240,7 +246,7 @@
     (let* ((spans
              (nerimux/renderer::%workspace-status-row-content-spans
               "stale label"
-              (list :file "wt-status" "a.txt" "M")
+              (list :file "wt-status" "a.txt" "M" :unstaged)
               :file))
            (span-texts
              (mapcar (function cl-tui-kit/core:text-span-text)

@@ -236,7 +236,8 @@ so the prefix keys would keep acting on that one while this pane is on screen."
         (%mark-dirty)
         t)
       ((and (consp object) (eq (first object) :file))
-       (destructuring-bind (worktree-id path code) (rest object)
+       (destructuring-bind (worktree-id path code &optional section) (rest object)
+         (declare (ignore section))
          (%client-toggle-selected-file-diff worktree-id path code)))
       (t nil))))
 

@@ -44,16 +44,15 @@
                   (nerimux/renderer:confirm-view-fields view)))
     (%mark-dirty)))
 
-(defun %request-confirm-clean-preview (conn view)
-  "Fill VIEW's `removes` line from `git clean -n -d`, the list magit shows
-   before the same question -- untracked files are gone for good once y runs."
+(defun %request-confirm-clean-preview (conn view &optional path-args)
+  "Fill VIEW's removes line from git clean -n -d, optionally scoped by PATH-ARGS."
   (let ((repository (and (nerimux/vcs:vcs-package-available-p)
                          (%client-selected-repository conn))))
     (if repository
         (nerimux/vcs:git-write-operation-async
          repository
          :clean
-         '("-n" "-d")
+         (append '("-n" "-d") path-args)
          :callback-dispatch #'%enqueue-main-thread-callback
          :on-complete (lambda (success-p output)
                         (%set-confirm-view-field
@@ -67,12 +66,14 @@
                                               "list unavailable")))
         (%set-confirm-view-field conn view "removes" "list unavailable"))))
 
-(defun %open-confirm-view (conn operation fields action &key on-cancel)
+(defun %open-confirm-view (conn operation fields action
+                                  &key on-cancel clean-preview-args)
   "Put a y/n confirmation in front of CONN and remember what to run on y.
    OPERATION titles the box; FIELDS is the ordered (LABEL . VALUE) body, to
-   which this adds, for `git clean`, the file list read while the box is
-   already up.  The keys that answer the box are the prompt line's job
-   (%CONFIRM-VIEW-PROMPT-LINE), not a field repeating them above it."
+   which this adds, for git clean, the file list read while the box is
+   already up. CLEAN-PREVIEW-ARGS can limit that list to selected paths. The
+   keys that answer the box are the prompt line's job (%CONFIRM-VIEW-PROMPT-LINE),
+   not a field repeating them above it."
   (let* ((clean-p (%confirm-clean-preview-p operation))
          (view (nerimux/renderer:make-confirm-view
                 :operation operation
@@ -84,7 +85,7 @@
           (client-conn-confirm-cancel-action conn) on-cancel)
     (%set-client-modal conn :confirm)
     (when clean-p
-      (%request-confirm-clean-preview conn view))
+      (%request-confirm-clean-preview conn view clean-preview-args))
     nil))
 
 (defun %close-confirm-view (conn)
