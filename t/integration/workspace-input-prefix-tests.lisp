@@ -186,26 +186,67 @@
         (expect (equalp (list (list 9999 #(17))) writes))
         (expect (eq :pane (nerimux::client-conn-view conn)))
         (expect (null (nerimux::client-conn-ui-prefix-p conn))))))
-  (it "prefix-q-sends-rebound-prefix-byte"
-    (with-minimal-session (pane win sess)
-      (declare (ignorable win))
-      (setf (nerimux/pane:pane-fd pane) 9999)
-      (let* ((conn (%make-test-conn))
-             (writes nil)
-             (orig (fdefinition (quote nerimux::pty-write))))
-        (setf (nerimux::client-conn-workspace-prefix-code conn) 113)
-        (nerimux::%set-client-focus conn pane)
-        (unwind-protect
-             (progn
-               (setf (fdefinition (quote nerimux::pty-write))
-                     (lambda (fd bytes) (push (list fd bytes) writes)))
-               (nerimux::%handle-multi-key-message sess conn #(113))
-               (expect (nerimux::client-conn-ui-prefix-p conn))
-               (nerimux::%handle-multi-key-message sess conn #(113)))
-          (setf (fdefinition (quote nerimux::pty-write)) orig))
-        (expect (equalp (list (list 9999 #(113))) writes))
-        (expect (eq :pane (nerimux::client-conn-view conn)))
-        (expect (null (nerimux::client-conn-ui-prefix-p conn))))))
+  (it "prefix-q-forwards-an-octet-through-client-wire"
+    (with-loop-state
+      (with-minimal-session (pane window session)
+        (declare (ignore window))
+        (let ((nerimux::*clients* nil)
+              (nerimux::*workspace-catalog-refresh-started-p* t)
+              (writes nil))
+          (setf (nerimux/pane:pane-fd pane) 9999)
+          (with-test-listener
+              (listener path (%test-socket-path "prefix-q-wire") :backlog 4)
+            (let ((client-socket nil)
+                  (server-socket nil)
+                  (conn nil))
+              (unwind-protect
+                   (progn
+                     (setf client-socket (nerimux/net:connect-to path))
+                     (setf server-socket
+                           (and client-socket
+                                (nerimux/net:accept-connection listener)))
+                     (expect client-socket :to-be-truthy)
+                     (expect server-socket :to-be-truthy)
+                     (setf conn
+                           (and server-socket
+                                (nerimux::%add-client server-socket)))
+                     (expect conn :to-be-truthy)
+                     (when (and client-socket conn)
+                       (setf (nerimux::client-conn-workspace-prefix-code conn) 17)
+                       (nerimux::%set-client-focus conn pane)
+                       (with-stubbed-fdefinition
+                           ((nerimux::read-available-octets
+                             (lambda (timeout-us max-octets)
+                               (declare (ignore timeout-us max-octets))
+                               (make-array 2
+                                           :element-type (quote (unsigned-byte 8))
+                                           :initial-contents (quote (17 113)))))
+                            (nerimux/pty:pty-write
+                             (lambda (fd bytes)
+                               (push (list fd bytes) writes))))
+                         (expect
+                          (nerimux::%forward-stdin-byte
+                           (nerimux/net:socket-stream client-socket)))
+                         (let ((ready
+                                 (nerimux/pty:select-fds
+                                  (list (nerimux::client-conn-fd conn)) 1000000)))
+                           (expect ready :to-be-truthy)
+                           (when ready
+                             (nerimux::%read-and-dispatch-client-message
+                              session conn)))))
+                (when conn
+                  (nerimux::%drop-client conn))
+                (when (and server-socket (null conn))
+                  (ignore-errors (nerimux/net:close-socket server-socket)))
+                (when client-socket
+                  (ignore-errors (nerimux/net:close-socket client-socket)))))
+            (expect (= 1 (length writes)))
+            (when (= 1 (length writes))
+              (expect (= 9999 (first (first writes))))
+              (expect (equalp #(17) (second (first writes))))
+              (expect
+               (typep (second (first writes))
+                      (quote (simple-array (unsigned-byte 8) (*))))))))))))
 
   (it "r4-4-prefix-w-opens-overview-directly-and-repeatedly-for-the-focused-worktree"
     (with-minimal-session (pane win sess)
