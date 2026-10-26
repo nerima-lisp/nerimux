@@ -299,9 +299,15 @@
       (format nil "~D shell~P" count count))))
 
 (defun %worktree-exited-pane-text (worktree)
-  "\"exited\" when one of WORKTREE's panes has lost its process."
-  (when (some #'pane-process-exited-p (worktree-panes worktree))
-    "exited"))
+  "(N exited) for non-agent panes in WORKTREE whose processes have exited."
+  (let ((count
+          (count-if
+           (lambda (pane)
+             (and (not (pane-agent-kind pane))
+                  (pane-process-exited-p pane)))
+           (worktree-panes worktree))))
+    (when (plusp count)
+      (format nil "(~D exited)" count))))
 
 (defun %worktree-agent-text (worktree)
   "\"agent RUNNING/WAITING/EXITED\" for WORKTREE's agent lifecycle, or NIL
