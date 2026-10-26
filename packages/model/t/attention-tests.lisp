@@ -349,3 +349,31 @@
                 (expect
                  (null
                   (nerimux/workspace-model:worktree-waiting-p worktree))))))
+
+(describe "F2 L3-05 running agent BEL attention"
+  (it "clears BEL attention when the running agent pane is opened"
+      (let* ((worktree
+               (nerimux/workspace-model:make-worktree :id "bel-running"))
+             (screen (make-screen 40 4))
+             (pane (nerimux/pane:make-pane :id 30
+                                          :agent-kind :codex
+                                          :fd 42
+                                          :screen screen)))
+        (nerimux/pane:worktree-add-pane worktree pane)
+        (nerimux/pane:pane-feed pane #(7))
+        (nerimux/pane:pane-mark-output pane #(7))
+        (expect
+         (nerimux/terminal/types:screen-bell-pending screen))
+        ;; Match runtime reader BEL handoff.
+        (when (nerimux/terminal/types:screen-bell-pending screen)
+          (nerimux/pane:pane-mark-bell pane))
+        (expect (eq :running (nerimux/pane:worktree-agent-state worktree)))
+        (expect (nerimux/workspace-model:worktree-waiting-p worktree))
+        (expect
+         (member :bell
+                 (nerimux/pane:pane-attention-reasons pane)))
+        (nerimux/pane:pane-mark-focused pane)
+        (expect (eq :running (nerimux/pane:worktree-agent-state worktree)))
+        (expect
+         (null (nerimux/workspace-model:worktree-waiting-p worktree)))
+        (expect (null (nerimux/pane:pane-attention-p pane))))))

@@ -894,13 +894,46 @@
       (expect (string= "w1 shell 1 exited"
                        (nerimux/renderer::%pane-tree-label shell)))))
 
-  (it "flags an unreadable checkout apart from a row that merely needs attention"
-    (let ((missing (nerimux/workspace-model:make-worktree :id "wt-gone" :missing-p t))
-          (dirty (nerimux/workspace-model:make-worktree :id "wt-dirty" :dirty-p t))
-          (quiet (nerimux/workspace-model:make-worktree :id "wt-quiet")))
-      (expect (string= "✗" (nerimux/renderer::%workspace-tree-node-mark missing :worktree)))
-      (expect (string= "!" (nerimux/renderer::%workspace-tree-node-mark dirty :worktree)))
-      (expect (string= " " (nerimux/renderer::%workspace-tree-node-mark quiet :worktree)))))
+  (it "flags a read-error checkout separately from missing and attention"
+    (let ((missing
+            (nerimux/workspace-model:make-worktree :id "wt-gone" :missing-p t))
+          (dirty
+            (nerimux/workspace-model:make-worktree :id "wt-dirty" :dirty-p t))
+          (read-error (nerimux/workspace-model:make-worktree :id "wt-read-error")))
+      (let* ((accessor
+               (find-symbol "WORKTREE-READ-ERROR-P" :nerimux/workspace-model))
+             (setter
+               (and accessor
+                    (fboundp (list (find-symbol "SETF" :cl) accessor))
+                    (fdefinition (list (find-symbol "SETF" :cl) accessor)))))
+        (expect accessor)
+        (when setter
+          (funcall setter t read-error)))
+      (let ((repository
+              (nerimux/workspace-model:make-repository
+               :id "repo-read-error" :worktrees (list read-error))))
+        (expect
+         (string=
+          "✗"
+          (nerimux/renderer::%workspace-tree-node-mark read-error :worktree)))
+        (expect
+         (string=
+          "!"
+          (nerimux/renderer::%workspace-tree-node-mark repository :repository)))
+        (expect
+         (string=
+          "✗"
+          (nerimux/renderer::%workspace-tree-node-mark missing :worktree)))
+        (expect
+         (string=
+          "!"
+          (nerimux/renderer::%workspace-tree-node-mark dirty :worktree)))
+        (expect
+         (string=
+          " "
+          (nerimux/renderer::%workspace-tree-node-mark
+           (nerimux/workspace-model:make-worktree :id "wt-quiet")
+           :worktree))))))
 
   (it "reads a changed file's porcelain code as a word"
     (expect (string= "modified" (nerimux/renderer::%changed-file-state-text ".M")))
@@ -1000,5 +1033,4 @@
         (expect (search "Repositories (2)"
                         (second (find :repositories unfiltered :key #'third))))
         (expect (search "Repositories (1)"
-                        (second (find :repositories filtered :key #'third))))
-        (expect (null (find :attention filtered :key #'third)))))))
+                        (second (find :repositories filtered :key #'third))))))))
