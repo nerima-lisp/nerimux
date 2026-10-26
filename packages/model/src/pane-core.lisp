@@ -326,6 +326,7 @@ binds this to its main-thread callback queue while reader threads are active.")
   (when pane
     (setf (pane-last-focused-time pane) (get-universal-time)
           (pane-seen-p pane) t
+          (pane-bell-p pane) nil
           ;; The user is looking at the pane the notification was about, so it
           ;; is no longer something the worktree is waiting on. The text itself
           ;; stays for the detail panel.
@@ -379,6 +380,7 @@ binds this to its main-thread callback queue while reader threads are active.")
 (defun worktree-removal-candidate-p (worktree)
   (and worktree
        (not (worktree-missing-p worktree))
+       (not (worktree-read-error-p worktree))
        (or (worktree-completed-p worktree)
            (let ((agent (worktree-agent-pane worktree)))
              (and agent (pane-process-exited-p agent))))))
