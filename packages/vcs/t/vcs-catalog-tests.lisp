@@ -34,9 +34,12 @@
                 (nerimux/workspace-model:make-repository
                  :specification "local/conflict-fixture"
                  :local-path source)))
+         (%catalog-test-write-file
+          (concatenate 'string source ".gitattributes")
+          "conflict.txt -merge")
          (%catalog-test-write-file (concatenate 'string source "conflict.txt")
                                    "base\n")
-         (%worktree-path-test-git source "add" "conflict.txt")
+         (%worktree-path-test-git source "add" ".gitattributes" "conflict.txt")
          (%catalog-test-commit source "base")
          (%worktree-path-test-git source "worktree" "add" "-b"
                                    "dirty-only" control "HEAD")
