@@ -316,4 +316,123 @@
           (expect
            (equal (list (list repository :switch (list "-")
                               (nerimux/workspace-model:worktree-path alpha)))
-                  calls)))))))
+                  calls))))))
+  (it "status-view-unstaged-discard-preserves-staged-index"
+    (with-fake-session (s)
+      (nerimux/test/vcs::%call-with-worktree-path-checkout
+       (lambda (repository source)
+         (let* ((organization
+                  (nerimux/workspace-model:make-organization
+                   :id "status-discard-org"))
+                (path "modified.txt")
+                (file (concatenate 'string source path))
+                (worktree
+                  (nerimux/workspace-model:make-worktree
+                   :id "wt-real-status" :repository repository
+                   :path source :branch "main" :head "main"
+                   :staged-files (list (cons "M" path))
+                   :unstaged-files (list (cons "M" path))))
+                (conn (%make-test-conn))
+                (nerimux::*clients* (list conn))
+                (nerimux/vcs::*workspace-organizations* (list organization))
+                (real-write
+                  (symbol-function 'nerimux/vcs:git-write-operation-async))
+                (calls nil)
+                (confirmation-command nil))
+           (with-open-file (stream file
+                                   :direction :output
+                                   :if-exists :supersede
+                                   :if-does-not-exist :create)
+             (write-line "head" stream))
+           (nerimux/test/vcs::%worktree-path-test-git
+            source "add" "--" path)
+           (nerimux/test/vcs::%worktree-path-test-git
+            source "-c" "user.name=Test" "-c" "user.email=test@example.invalid"
+            "-c" "commit.gpgsign=false" "-c" "core.hooksPath=/dev/null"
+            "commit" "-m" "initial file")
+           (with-open-file (stream file
+                                   :direction :output
+                                   :if-exists :supersede
+                                   :if-does-not-exist :create)
+             (write-line "staged" stream))
+           (nerimux/test/vcs::%worktree-path-test-git
+            source "add" "--" path)
+           (with-open-file (stream file
+                                   :direction :output
+                                   :if-exists :supersede
+                                   :if-does-not-exist :create)
+             (write-line "unstaged" stream))
+           (expect
+            (string= "head"
+                     (nerimux/test/vcs::%worktree-path-test-git
+                      source "show" "HEAD:modified.txt")))
+           (expect
+            (string= "staged"
+                     (nerimux/test/vcs::%worktree-path-test-git
+                      source "show" ":modified.txt")))
+           (expect
+            (string=
+             "unstaged"
+             (string-right-trim '(#\Newline #\Return)
+                                (uiop:read-file-string file))))
+           (nerimux/workspace-model:organization-add-repository
+            organization repository)
+           (nerimux/workspace-model:repository-add-worktree
+            repository worktree)
+           (setf (nerimux::client-conn-view conn) :status
+                 (nerimux::client-conn-selected-worktree conn) worktree)
+           (nerimux::%set-client-selected-tree-object
+            conn (list :file "wt-real-status" path " M"))
+           (with-stubbed-fdefinition
+               ((cl-concurrent-kit:make-thread
+                  (lambda (function &key name)
+                    (declare (ignore name))
+                    (funcall function)))
+                (nerimux::%refresh-client-picker
+                  (lambda (&rest arguments)
+                    (declare (ignore arguments))))
+                (nerimux/vcs:git-write-operation-async
+                  (lambda (received-repository operation arguments
+                           &key callback-dispatch on-complete on-error
+                             working-directory)
+                    (push (list received-repository operation arguments) calls)
+                    (funcall real-write
+                             received-repository operation arguments
+                             :callback-dispatch callback-dispatch
+                             :on-complete on-complete
+                             :on-error on-error
+                             :working-directory working-directory))))
+             (nerimux::%handle-multi-key-message s conn "k")
+             (expect (eq :confirm (nerimux::client-conn-modal conn)))
+             (setf confirmation-command
+                   (nerimux/renderer:confirm-view-operation
+                    (nerimux::client-conn-confirm-view conn)))
+             (nerimux::%handle-multi-key-message s conn "y")
+             (nerimux::%drain-main-thread-callbacks)
+             (expect (= 1 (length calls)))
+             (let ((executed (first calls)))
+               (expect
+                (and executed
+                     (string=
+                      confirmation-command
+                      (nerimux::%transient-command-text
+                       (second executed) (third executed))))))
+             (expect
+              (string=
+               "staged"
+               (nerimux/test/vcs::%worktree-path-test-git
+                source "show" ":modified.txt")))
+             (expect
+              (string=
+               "staged"
+               (string-right-trim '(#\Newline #\Return)
+                                  (uiop:read-file-string file))))
+             (expect
+              (string= "git restore --worktree -- modified.txt"
+                       confirmation-command))
+             (expect
+              (equal
+               (list
+                (list repository :restore
+                      (list "--worktree" "--" "modified.txt")))
+               calls)))))))))
