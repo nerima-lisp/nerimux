@@ -351,14 +351,15 @@
       (expect (null (nerimux::%client-command-buffer-delete-character conn)))
       (expect (string= "" (nerimux::client-conn-command-buffer conn)))))
 
-  (it "command-buffer-append-accepts-printable-text-only"
+  (it "command-buffer-append-rejects-control-text-and-clears-stale-input"
     (let ((conn (nerimux::%make-client-conn)))
       (expect (nerimux::%client-command-buffer-append conn "ab"))
       (expect (string= "ab" (nerimux::client-conn-command-buffer conn)))
       (expect (null (nerimux::%client-command-buffer-append conn #(10))))
-      (expect (string= "ab" (nerimux::client-conn-command-buffer conn)))
+      (expect (string= "" (nerimux::client-conn-command-buffer conn)))
       (expect (null (nerimux::%client-command-buffer-append
-                     conn (make-array '(1 1) :initial-element 65))))))
+                     conn (make-array (list 1 1) :initial-element 65))))
+      (expect (string= "" (nerimux::client-conn-command-buffer conn)))))
 
   (it "tab-extends-to-the-shared-prefix-before-it-cycles-candidates"
     (let ((conn (nerimux::%make-client-conn))
