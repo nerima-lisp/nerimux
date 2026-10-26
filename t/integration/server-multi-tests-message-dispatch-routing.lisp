@@ -539,6 +539,49 @@
             (send-byte (char-code #\I))
             (expect (equal (list (list 11 focus-out) (list 11 focus-in))
                            (nreverse writes)))))))))
+(describe "F3 command-input regressions"
+  (it "L2-16 expires a delayed Escape prefix without restoring a tree filter"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (section-moves nil)
+             (normal-moves nil))
+        (labels ((send (bytes)
+                   (nerimux::%handle-multi-client-message
+                    nerimux::+msg-key+ bytes s conn))
+                 (send-text (text)
+                   (dolist (byte (coerce (cl-codec-kit:string-to-octets
+                                          text
+                                          :encoding :utf-8)
+                                         (quote list)))
+                     (send (vector byte))))
+                 (accept-filter ()
+                   (send #(47))
+                   (send-text "alpha")
+                   (send #(13))))
+          (setf (nerimux::client-conn-view conn) :repolist)
+          (with-stubbed-fdefinition
+              ((nerimux::%select-client-tree-section-relative
+                (lambda (received-conn delta)
+                  (push (list received-conn delta) section-moves)))
+               (nerimux::%select-client-tree-relative
+                (lambda (received-conn delta)
+                  (push (list received-conn delta) normal-moves))))
+            (accept-filter)
+            (send #(27))
+            (send #(110))
+            (expect (string= "alpha" (nerimux::client-conn-tree-filter conn)))
+            (expect (equal (list (list conn 1)) (reverse section-moves)))
+            (send #(27))
+            (expect (null (nerimux::client-conn-tree-filter conn)))
+            ;; Wait beyond the 250 ms Escape-prefix window.
+            (sleep 0.4)
+            (send #(110))
+            (expect (null (nerimux::client-conn-tree-filter conn)))
+            (expect (null (gethash conn nerimux::*client-meta-pending*)))
+            (expect (null (gethash conn nerimux::*client-meta-tree-filter-snapshots*)))
+            (expect (equal (list (list conn 1)) (reverse section-moves)))
+            (expect (equal (list (list conn 1)) (reverse normal-moves)))))))))
 
 (describe "fr-107-server-input-suite"
 
