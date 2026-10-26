@@ -95,15 +95,16 @@
   (let* ((top (max 0 (1- (floor rows 2))))
          (ghq-missing-p (string= ghq-root +workspace-ghq-missing-root+))
          (lines
-          (list (cons (if ghq-missing-p
-                          "no repositories scanned"
-                          "no repositories found")
-                      +sgr-muted-italic+)
-                (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+)
-                (cons (if ghq-missing-p
-                          "install ghq, or add it to PATH"
-                          "clone one: :clone <url>")
-                      +sgr-muted+))))
+          (append
+           (list (cons (if ghq-missing-p
+                           "no repositories scanned"
+                           "no repositories found")
+                       +sgr-muted-italic+)
+                 (cons (format nil "ghq root: ~A" ghq-root) +sgr-muted+))
+           (if ghq-missing-p
+               (list (cons "install ghq, or add it to PATH" +sgr-muted+))
+               (list (cons "ghq get <owner>/<repo>" +sgr-muted+)
+                     (cons "clone one: :clone <url>" +sgr-muted+))))))
     (loop for (text . sgr) in lines
           for row from top
           for clipped = (%display-clip text cols)
