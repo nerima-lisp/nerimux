@@ -57,7 +57,10 @@
               (list "git" "-C" source "merge" "feature")
               :environment *worktree-path-test-git-environment*
               :output :string :error-output :string :ignore-error-status t)
-           (declare (ignore stdout stderr))
+           (unless (= 1 exit-code)
+             (format *error-output*
+                     "git merge exit code ~D~%stdout:~%~A~%stderr:~%~A~%"
+                     exit-code stdout stderr))
            (expect (= 1 exit-code)))
          (%catalog-test-write-file
           (concatenate 'string source "dirty-after-conflict.txt") "dirty\n")

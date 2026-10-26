@@ -77,7 +77,7 @@
                 (nerimux/pane:pane-mark-focused pane)
                 (expect (null (nerimux/pane:pane-unread-output-p pane)))
                 (expect
-                 (member :bell (nerimux/pane:pane-attention-reasons pane)))
+                 (not (member :bell (nerimux/pane:pane-attention-reasons pane))))
                 (expect
                  (member :process-exited
                          (nerimux/pane:pane-attention-reasons pane)))

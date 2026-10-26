@@ -500,7 +500,7 @@
                                sorted-organization)))))
         (nerimux/vcs:set-workspace-organizations previous))))
 
-  (it "keeps unknown creation keys stable when only one worktree has pane activity"
+  (it "sorts by pane activity when creation keys are unknown"
     (let ((previous (nerimux/vcs:workspace-organizations)))
       (unwind-protect
            (let* ((organization
@@ -527,7 +527,7 @@
                    (- (get-universal-time) 30))
              (nerimux/vcs:set-workspace-organizations (list organization))
              (let ((sorted-organization (first (nerimux/vcs:workspace-organizations))))
-               (expect (equal (list worktree-idle worktree-active)
+               (expect (equal (list worktree-active worktree-idle)
                               (nerimux/workspace-model:repository-worktrees
                                (first (nerimux/workspace-model:organization-repositories
                                        sorted-organization)))))))
@@ -1043,7 +1043,7 @@
        (append invalid '("/virtual/20000229T120000-abcdef0"))
        (cons (length invalid) (loop for index below (length invalid) collect index)))))
 
-  (it "does not reorder after output focus agent or completed changes and republishing"
+  (it "sorts by pane activity on republish and preserves that order afterward"
     (%call-with-creation-order-fixture
      '("/virtual/20250302T120000-abcdef0" "/virtual/20250301T120000-abcdef0")
      (lambda (organization repository worktrees organizations)
@@ -1062,8 +1062,10 @@
               (setf (nerimux/workspace-model:worktree-completed-p (second worktrees)) t))
              (:exit (setf (nerimux/pane:pane-process-exited-p pane) t)))
            (nerimux/vcs:set-workspace-organizations organizations)
-           (expect (equal worktrees
-                          (nerimux/workspace-model:repository-worktrees repository))))))))
+           (expect
+            (equal (list (second worktrees)
+                         (first worktrees))
+                   (nerimux/workspace-model:repository-worktrees repository))))))))
 
   (it "reconstructs creation order from paths without pane or persisted timestamp state"
     (let ((paths '("/virtual/20250301T120000-abcdef0"
