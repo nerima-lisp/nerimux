@@ -173,4 +173,26 @@
                   (*print-circle* nil))
               (nerimux::main)))))
       (expect (eql 1 exit-code))
-      (expect (eq t captured-print-circle)))))
+      (expect (eq t captured-print-circle))))
+  (it "main-refreshes-uiop-temporary-directory-before-startup-mode-dispatch"
+    (let ((original-tempdir uiop:*temporary-directory*)
+          expected-tempdir
+          dispatch-tempdir)
+      (unwind-protect
+           (progn
+             (setf expected-tempdir
+                   (progn
+                     (uiop:setup-temporary-directory)
+                     (namestring uiop:*temporary-directory*)))
+             (setf uiop:*temporary-directory* #p"/nix/var/nix/builds/stale/")
+             (with-stubbed-fdefinition
+                 ((nerimux::%dispatch-startup-mode-entry
+                   (lambda (&rest args)
+                     (declare (ignore args))
+                     (setf dispatch-tempdir
+                           (namestring uiop:*temporary-directory*)))))
+               (let ((sb-ext:*posix-argv* (list "nerimux" "server" "work")))
+                 (nerimux::main)))
+             (expect dispatch-tempdir :to-be-truthy)
+             (expect (string= expected-tempdir dispatch-tempdir)))
+        (setf uiop:*temporary-directory* original-tempdir)))))

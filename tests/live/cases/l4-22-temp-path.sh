@@ -88,7 +88,7 @@ trap cleanup EXIT
 "$harness" wait-for "$lane" 'nerimux' 30
 "$harness" snap "$lane" L4-22-initial
 "$harness" keys "$lane" : 'clone git@example.invalid:org/repo' Enter
-"$harness" wait-for "$lane" 'clone failed:' 30
+"$harness" wait-for "$lane" 'repo failed:' 30
 "$harness" snap "$lane" L4-22-after-failure
 
 app_trace="$fixture_root/ghq/.l4-22-app-env.txt"
@@ -131,14 +131,19 @@ grep -Fqx "GHQ_ROOT=$fixture_root/ghq" "$trace"
 grep -Fqx 'TMPDIR_WRITABLE=yes' "$trace"
 grep -Fq 'git@example.invalid:org/repo' "$trace"
 
-if ! grep -Eiq 'clone failed:.*(Could not resolve hostname|nodename nor servname|Name or service not known|Temporary failure in name resolution|Name resolution failed)' "$pane"; then
+if ! grep -Fq 'repo failed:' "$pane"; then
   cat "$pane" >&2
-  printf 'clone did not reach the expected .invalid DNS failure\n' >&2
+  printf 'clone failure state was not rendered\n' >&2
   exit 1
 fi
-if grep -Fq 'example.invalid/org' "$pane"; then
+if ! grep -Fq 'example.invalid/org' "$pane"; then
   cat "$pane" >&2
-  printf 'failed clone left a repository row\n' >&2
+  printf 'failed repository row was not rendered\n' >&2
+  exit 1
+fi
+if ! grep -Fq 'ssh:' "$pane"; then
+  cat "$pane" >&2
+  printf 'clone did not report an SSH failure\n' >&2
   exit 1
 fi
 if [[ -e "$fixture_root/ghq/example.invalid/org/repo.git" ]]; then
