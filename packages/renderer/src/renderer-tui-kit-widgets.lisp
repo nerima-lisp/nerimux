@@ -85,6 +85,17 @@
     (if (eq picker-status :unsupported)
         "regex: unsupported pattern, matching literally"
         "regex on")))
+(defclass %picker-query-input-widget
+    (cl-tui-kit/widgets:input-widget)
+  ()
+  (:documentation "Reserves a cell for the end cursor without changing the query value."))
+(defmethod cl-tui-kit/widgets:widget-preferred-size
+    ((widget %picker-query-input-widget))
+  (declare (ignore widget))
+  (let ((size (call-next-method)))
+    (cl-tui-kit/core:make-size
+     (1+ (cl-tui-kit/core:size-width size))
+     (cl-tui-kit/core:size-height size))))
 
 (defun %render-picker-widget
     (surface rows cols items query index regex-p &optional picker-status)
@@ -112,12 +123,14 @@
             :role :title
             :theme *picker-panel-theme*))
          (input
-           (cl-tui-kit/widgets:make-input-widget
-            :value query
-            :placeholder " search workspace, repository, worktree, or pane"
-            :id :nerimux-picker-query
-            :theme *picker-panel-theme*
-            :focusable-p nil))
+           (change-class
+            (cl-tui-kit/widgets:make-input-widget
+             :value query
+             :placeholder " search workspace, repository, worktree, or pane"
+             :id :nerimux-picker-query
+             :theme *picker-panel-theme*
+             :focusable-p nil)
+            (find-class (quote %picker-query-input-widget))))
          (regex-flag (%picker-regex-flag-text regex-p picker-status))
          (flags
            (when regex-flag
