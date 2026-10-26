@@ -243,13 +243,28 @@
           (subseq trimmed 0 180)
           trimmed))))
 
+(defun %clone-error-diagnostic-line (text)
+  (when (and (stringp text) (plusp (length text)))
+    (with-input-from-string (input text)
+      (loop for line = (read-line input nil nil)
+            while line
+            for cleaned = (%clean-clone-error-text line)
+            when (some (lambda (marker)
+                         (search marker cleaned :test (function char-equal)))
+                       (list "ssh: " "fatal: " "error: " "remote: "))
+              return cleaned))))
+
 (defun %clone-error-reason (stdout stderr status)
-  (or (let ((text (%clean-clone-error-text
-                   (or (and (stringp stderr) (plusp (length stderr)) stderr)
-                       (and (stringp stdout) (plusp (length stdout)) stdout)
-                       ""))))
-        (and (plusp (length text)) text))
-      (format nil "ghq exited with status ~A" status)))
+  (let* ((text (or (and (stringp stderr) (plusp (length stderr)) stderr)
+                   (and (stringp stdout) (plusp (length stdout)) stdout)
+                   ""))
+         (diagnostic (and (> (length text) 180)
+                          (%clone-error-diagnostic-line text)))
+         (clean (unless diagnostic
+                  (%clean-clone-error-text text))))
+    (or diagnostic
+        (and clean (plusp (length clean)) clean)
+        (format nil "ghq exited with status ~A" status))))
 
 (defun %clone-process-environment (&optional (environment (sb-ext:posix-environ)))
   (let ((updates (list
