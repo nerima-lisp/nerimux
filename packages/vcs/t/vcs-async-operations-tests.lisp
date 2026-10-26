@@ -2130,6 +2130,7 @@
                      (real-signal-semaphore
                        (symbol-function 'sb-thread:signal-semaphore))
                      (signal-count 0)
+                     (preparation-worker-threads nil)
                      (diagnostic-count 0)
                      (read-count 0)
                      (start-count 0)
@@ -2158,10 +2159,14 @@
                        :unexpected))
                     (sb-thread:signal-semaphore
                      (lambda (semaphore &optional (count 1))
-                       (let ((current-count
+                       (let ((fail-p
                                (cl-concurrent-kit:with-lock-held (probe-lock)
-                                 (incf signal-count))))
-                         (if (<= current-count 4)
+                                 (when (member sb-thread:*current-thread*
+                                               preparation-worker-threads
+                                               :test (function eq))
+                                   (incf signal-count)
+                                   (<= signal-count 4)))))
+                         (if fail-p
                              (error "Fixture queue signal failed")
                              (funcall real-signal-semaphore semaphore count)))))
                     (log-kit:emit-log
@@ -2184,7 +2189,10 @@
                                  (lambda (repository)
                                    (declare (ignore repository))
                                    (cl-concurrent-kit:with-lock-held (probe-lock)
-                                     (incf start-count)))
+                                     (incf start-count)
+                                     (pushnew sb-thread:*current-thread*
+                                              preparation-worker-threads
+                                              :test (function eq))))
                                  :on-error
                                  (lambda (repository condition)
                                    (declare (ignore repository condition))
@@ -2215,6 +2223,7 @@
                 (cl-concurrent-kit:with-lock-held (probe-lock)
                   (expect (= 5 start-count))
                   (expect (= 4 diagnostic-count))
+                  (expect (= 4 signal-count))
                   (expect (= 1 read-count))
                   (expect (= 4 error-count))
                   (expect (= 1 completion-count)))))))
