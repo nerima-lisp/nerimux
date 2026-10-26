@@ -58,7 +58,7 @@
 
 (defun %client-command-buffer-append (conn payload)
   (let ((text (%client-payload-text payload)))
-    (when 
+    (when
         (and text
              (every
               (lambda (character)
@@ -499,7 +499,9 @@
 (defun %client-meta-pending-consume (conn payload &optional session)
   "Resolve UI escape sequences without replaying their tails as ordinary keys."
   (let ((state (gethash conn *client-meta-pending*)))
-    (remhash conn *client-meta-pending*)
+    (progn
+      (remhash conn *client-meta-pending*)
+      (remhash conn *client-meta-prefix-deadlines*))
     (case state
       (:second
        (cond
@@ -620,8 +622,22 @@
     (when tree-filter
       (setf (gethash conn *client-meta-tree-filter-snapshots*) tree-filter)
       (%client-step-back session conn)))
-  (setf (gethash conn *client-meta-pending*) :second)
+  (setf (gethash conn *client-meta-pending*) :second
+        (gethash conn *client-meta-prefix-deadlines*)
+        (+ (get-internal-real-time) +client-meta-prefix-timeout+))
   t)
+
+(defun %client-meta-pending-state (conn)
+  (let ((state (gethash conn *client-meta-pending*))
+        (deadline (gethash conn *client-meta-prefix-deadlines*)))
+    (when (and (eq state :second)
+               deadline
+               (>= (get-internal-real-time) deadline))
+      (remhash conn *client-meta-pending*)
+      (remhash conn *client-meta-prefix-deadlines*)
+      (remhash conn *client-meta-tree-filter-snapshots*)
+      (return-from %client-meta-pending-state nil))
+    state))
 
 (defun %client-meta-ui-escape-restore-filter (conn)
   (multiple-value-bind (tree-filter saved-p)
@@ -643,7 +659,7 @@
          (setf (gethash conn *client-meta-pending*) :paste-second)
          (%client-paste-consume-byte conn payload))
      t)
-    ((gethash conn *client-meta-pending*)
+    ((%client-meta-pending-state conn)
      (%client-meta-ui-escape-restore-filter conn)
      (%client-meta-pending-consume conn payload session)
      t)

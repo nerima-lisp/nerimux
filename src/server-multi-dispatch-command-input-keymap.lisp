@@ -5,7 +5,7 @@
                   (:let ((view (client-conn-view conn))
                          (menu-view-p (member view '(:repolist :status)))))
                   ((and (not *client-meta-replaying*)
-                        (gethash conn *client-meta-pending*))
+                        (%client-meta-pending-state conn))
                    (%client-meta-ui-escape-restore-filter conn)
                    (%client-meta-pending-consume conn payload session))
                   ((and (not *client-meta-replaying*)
