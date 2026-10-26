@@ -671,6 +671,267 @@
         (when (probe-file root)
           (uiop:delete-directory-tree
            root :validate t :if-does-not-exist :ignore)))))
+  (it "attach-client-opens-picker-for-relative-path-that-matches-ghq-spec-through-dispatch"
+  (let* ((root
+           (merge-pathnames
+            (format nil "nerimux-attach-relative-selector-~D-~D/"
+                    (get-universal-time)
+                    (sb-posix:getpid))
+            (host-kit:temporary-directory)))
+         (ghq-root (merge-pathnames "ghq/" root))
+         (bare (merge-pathnames "example.test/org/bare-repo/" ghq-root))
+         (seed (merge-pathnames "seed/" root))
+         (alpha (merge-pathnames ".worktrees/alpha/" bare))
+         (cwd (merge-pathnames "ambiguous-cwd/" root))
+         (local-path (merge-pathnames "example.test/org/bare-repo/" cwd))
+         (selector "example.test/org/bare-repo")
+         (scan-entered-p nil)
+         (scan-released-p nil)
+         (entered (sb-thread:make-semaphore :count 0))
+         (resume (sb-thread:make-semaphore :count 0))
+         (real-ghq-list
+           (symbol-function
+            (find-symbol "GHQ-LIST-REPOSITORIES" "VCS-KIT"))))
+    (flet ((run-git (&rest arguments)
+             (uiop:run-program (cons "git" arguments)
+                               :output :string
+                               :error-output :string))
+           (await-catalog-settle ()
+             (loop repeat 6000
+                   until nerimux::*workspace-catalog-loaded-p*
+                   do (nerimux::%drain-main-thread-callbacks)
+                      (sleep 0.01))
+             (nerimux::%drain-main-thread-callbacks)))
+      (unwind-protect
+           (progn
+             (ensure-directories-exist (merge-pathnames "placeholder" ghq-root))
+             (ensure-directories-exist (merge-pathnames "placeholder" seed))
+             (ensure-directories-exist (merge-pathnames "placeholder" local-path))
+             (run-git "init" "--bare" "--initial-branch=main" (namestring bare))
+             (run-git "init" "--initial-branch=main" (namestring seed))
+             (run-git "-C" (namestring seed)
+                      "-c" "user.name=Test"
+                      "-c" "user.email=test@example.invalid"
+                      "-c" "commit.gpgsign=false"
+                      "-c" "core.hooksPath=/dev/null"
+                      "commit" "--allow-empty" "-m" "fixture")
+             (run-git "-C" (namestring seed) "push" (namestring bare) "main")
+             (run-git "-C" (namestring bare) "worktree" "add"
+                      "-b" "feature/alpha" (namestring alpha) "main")
+             (with-temporary-posix-environment-variable
+                 ("GHQ_ROOT" (namestring ghq-root))
+               (with-stubbed-fdefinition
+                   ((vcs-kit:ghq-list-repositories
+                     (lambda (&rest arguments)
+                       (setf scan-entered-p t)
+                       (sb-thread:signal-semaphore entered)
+                       (unless (sb-thread:wait-on-semaphore resume :timeout 30)
+                         (error "Timed out waiting for attach dispatch before ghq scan"))
+                       (apply real-ghq-list arguments))))
+                 (unwind-protect
+                      (progn
+                        (nerimux::%drain-main-thread-callbacks)
+                        (with-fake-session (session)
+                          (with-registered-sessions (("0" session))
+                            (let ((nerimux/vcs::*workspace-organizations* nil)
+                                  (nerimux/vcs::*ghq-root-cache* :unresolved)
+                                  (nerimux::*last-selected-worktree-token* nil)
+                                  (nerimux::*workspace-catalog-refresh-started-p* nil)
+                                  (nerimux::*workspace-catalog-loaded-p* nil)
+                                  (nerimux::*workspace-scan-progress* nil)
+                                  (nerimux::*workspace-refreshing-ids*
+                                    (make-hash-table :test #'equal))
+                                  (nerimux::*workspace-stale-ids*
+                                    (make-hash-table :test #'equal))
+                                  (nerimux::*workspace-operation-jobs*
+                                    (make-hash-table :test #'equal))
+                                  (nerimux::*clients* nil))
+                              (expect (null (nerimux/vcs:workspace-organizations))
+                                      :to-be-truthy)
+                              (with-test-listener
+                                  (listener path
+                                            (%test-socket-path
+                                             (format nil "attach-relative-selector-~D"
+                                                     (sb-posix:getpid)))
+                                            :backlog 4)
+                                (let ((client (nerimux/net:connect-to path))
+                                      (server-sock nil)
+                                      (conn nil))
+                                  (unwind-protect
+                                       (progn
+                                         (expect client :to-be-truthy)
+                                         (when client
+                                           (setf server-sock
+                                                 (nerimux/net:accept-connection
+                                                  listener))
+                                           (expect server-sock :to-be-truthy)
+                                           (when server-sock
+                                             (setf conn
+                                                   (nerimux::%add-client server-sock))
+                                             (expect conn :to-be-truthy)
+                                             (when conn
+                                               (expect
+                                                (sb-thread:wait-on-semaphore
+                                                 entered :timeout 30)
+                                                :to-be-truthy)
+                                               (flet ((dispatch-next-client-frame ()
+                                                        (let ((ready
+                                                                (nerimux/pty:select-fds
+                                                                 (list
+                                                                  (nerimux::client-conn-fd
+                                                                   conn))
+                                                                 1000000)))
+                                                          (expect ready :to-be-truthy)
+                                                          (when ready
+                                                            (nerimux::%read-and-dispatch-client-message
+                                                             session conn)))))
+                                                 (send-frame
+                                                  (nerimux/net:socket-stream client)
+                                                  (msg-attach 24 80))
+                                                 (force-output
+                                                  (nerimux/net:socket-stream client))
+                                                 (dispatch-next-client-frame)
+                                                 (let ((*default-pathname-defaults* ghq-root))
+                                                   (nerimux::%send-client-attach-target
+                                                    (nerimux/net:socket-stream client)
+                                                    selector))
+                                                 (force-output
+                                                  (nerimux/net:socket-stream client))
+                                                 (dispatch-next-client-frame)
+                                                 (expect
+                                                  (string= selector
+                                                           (nerimux::client-conn-attach-target
+                                                            conn))
+                                                  :to-be-truthy)
+                                                 (expect
+                                                  (string= (namestring (truename ghq-root))
+                                                           (nerimux::client-conn-attach-cwd
+                                                            conn))
+                                                  :to-be-truthy)
+                                                 (expect (probe-file local-path)
+                                                         :to-be-truthy)
+                                                 (expect
+                                                  (null (probe-file (merge-pathnames ".git/" local-path)))
+                                                  :to-be-truthy)
+                                                 (expect
+                                                  (null (nerimux/vcs:workspace-organizations))
+                                                  :to-be-truthy)
+                                                 (expect
+                                                  (null
+                                                   (nerimux::client-conn-modal conn))
+                                                  :to-be-truthy)
+                                                 (sb-thread:signal-semaphore resume)
+                                                 (setf scan-released-p t)
+                                                 (%wait-for-test-worker
+                                                  (lambda (timeout-seconds)
+                                                    (let ((deadline
+                                                            (+ (get-internal-real-time)
+                                                               (round
+                                                                (* timeout-seconds
+                                                                   internal-time-units-per-second)))))
+                                                      (loop
+                                                        (nerimux::%drain-main-thread-callbacks)
+                                                        (when nerimux::*workspace-catalog-loaded-p*
+                                                          (return t))
+                                                        (when (>= (get-internal-real-time)
+                                                                  deadline)
+                                                          (return nil))
+                                                        (sleep 0.01))))
+                                                  "real Git workspace catalog")
+                                                 (nerimux::%drain-main-thread-callbacks)
+                                                 (let* ((organizations
+                                                          (nerimux/vcs:workspace-organizations))
+                                                        (repository
+                                                          (loop for organization in organizations
+                                                                thereis
+                                                                (find-if
+                                                                 (lambda (candidate)
+                                                                   (string=
+                                                                    selector
+                                                                    (nerimux/workspace-model:repository-specification
+                                                                     candidate)))
+                                                                 (nerimux/workspace-model:organization-repositories
+                                                                  organization)))))
+                                                 (expect scan-entered-p :to-be-truthy)
+                                                 (expect organizations :to-be-truthy)
+                                                 (expect repository :to-be-truthy)
+                                                 (progn
+                                                   (when repository
+                                                     (expect
+                                                      (string=
+                                                       (nerimux::%workspace-canonical-path
+                                                        (namestring
+                                                         (merge-pathnames selector ghq-root)))
+                                                       (nerimux::%workspace-canonical-path
+                                                        (nerimux/workspace-model:repository-local-path
+                                                         repository)))
+                                                      :to-be-truthy)
+                                                     (expect
+                                                      (eq repository
+                                                          (nerimux::client-conn-selected-tree-object
+                                                           conn))
+                                                      :to-be-truthy))
+                                                   (expect
+                                                    (null
+                                                     (nerimux::client-conn-modal conn))
+                                                    :to-be-truthy)
+                                                   (let ((*default-pathname-defaults* cwd))
+                                                     (nerimux::%send-client-attach-target
+                                                      (nerimux/net:socket-stream client)
+                                                      selector))
+                                                   (force-output
+                                                    (nerimux/net:socket-stream client))
+                                                   (dispatch-next-client-frame)
+                                                   (expect
+                                                    (string=
+                                                     (namestring (truename cwd))
+                                                     (nerimux::client-conn-attach-cwd
+                                                      conn))
+                                                    :to-be-truthy)
+                                                   (expect
+                                                    (eq :picker
+                                                        (nerimux::client-conn-modal conn))
+                                                    :to-be-truthy))
+                                                 (expect
+                                                    (string= selector
+                                                             (nerimux::client-conn-picker-query
+                                                              conn))
+                                                    :to-be-truthy)
+                                                 (multiple-value-bind (type payload)
+                                                       (nerimux/protocol::decode-frame
+                                                        (progn
+                                                          (nerimux::%render-client-frame
+                                                           session conn)
+                                                          (nerimux::%render-client-frame
+                                                           session conn)))
+                                                     (expect (= nerimux::+msg-frame+ type)
+                                                             :to-be-truthy)
+                                                     (let ((visible
+                                                             (strip-sgr
+                                                              (nerimux/protocol::decode-text
+                                                               payload))))
+                                                       (expect
+                                                        (search
+                                                         "Pick a worktree, repository or pane"
+                                                         visible)
+                                                        :to-be-truthy)
+                                                       (expect (search selector visible)
+                                                               :to-be-truthy))))))))
+                                    (when (and conn
+                                               (member conn nerimux::*clients*))
+                                      (nerimux::%drop-client conn))
+                                    (dolist (socket
+                                             (remove nil (list client server-sock)))
+                                      (ignore-errors
+                                        (nerimux/net:close-socket socket))))))))))
+                   (unless scan-released-p
+                     (sb-thread:signal-semaphore resume))
+                   (when scan-entered-p
+                     (await-catalog-settle))))))
+        (when (probe-file root)
+          (uiop:delete-directory-tree
+           root :validate t :if-does-not-exist :ignore)))))
+))
   (it "picker-close-requires-session"
     (with-fake-session (s)
       (let ((conn (%make-test-conn)))
