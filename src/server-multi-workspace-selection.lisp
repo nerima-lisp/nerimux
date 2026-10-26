@@ -138,19 +138,22 @@
    spec resolved to nothing and reported \"attach target not found\" for
    something the workspace was holding."
   (when (and (stringp token) (plusp (length token)))
-    (let ((wanted (%workspace-strip-dot-git token))
-          (resolved (%workspace-canonical-path token)))
+    (let* ((wanted (%workspace-strip-dot-git token))
+           (pathname (ignore-errors (sb-ext:parse-native-namestring token)))
+           (resolved (and pathname
+                          (eq :absolute (first (pathname-directory pathname)))
+                          (%workspace-canonical-path token))))
       (flet ((matches-p (field)
-               (and (stringp field)
-                    (or (string= (%workspace-strip-dot-git field) wanted)
-                        (and resolved
-                             (equal resolved
-                                    (%workspace-canonical-path field)))))))
+                        (and (stringp field)
+                             (or (string= (%workspace-strip-dot-git field) wanted)
+                                 (and resolved
+                                      (equal resolved
+                                             (%workspace-canonical-path field)))))))
         (loop for organization in organizations
               thereis (find-if
                        (lambda (repository)
                          (some
-                          #'matches-p
+                          (function matches-p)
                           (list
                            (nerimux/workspace-model:repository-specification
                             repository)

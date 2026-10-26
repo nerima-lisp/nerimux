@@ -67,36 +67,76 @@
    Selection by cwd, and by whatever was selected last, is unchanged: neither is
    a selector the user typed, so neither can be ambiguous in this sense.
 
-   An explicit selector answers on its own: cwd and the last selection stand in
-   only when the user named nothing, never for a selector that matched nothing,
-   because substituting a different worktree for the one that was typed reads
-   as a successful attach to the wrong place.
-
-   Returns a property list consumed by %CLIENT-ATTACH-SELECTION."
+   An explicit selector does not fall back to cwd or previous selection. A
+   relative path is resolved from the attach client CWD before matching. If that
+   path equals the repository local path, nested worktrees do not make the
+   repository selector ambiguous."
   (let* ((explicit (client-conn-attach-target conn))
          (explicitp (and (stringp explicit) (plusp (length explicit))))
          (cwd (client-conn-attach-cwd conn))
+         (relative-selector-pathname
+          (and explicitp
+               (ignore-errors (sb-ext:parse-native-namestring explicit))))
+         (relative-selector-p
+          (and relative-selector-pathname
+               (eq :relative
+                   (first (pathname-directory relative-selector-pathname)))))
+         (relative-path
+          (and relative-selector-p
+               (stringp cwd)
+               (plusp (length cwd))
+               (let ((cwd-pathname
+                      (ignore-errors
+                       (sb-ext:parse-native-namestring cwd))))
+                 (when (and cwd-pathname
+                            (eq :absolute
+                                (first (pathname-directory cwd-pathname))))
+                   (%workspace-canonical-path
+                    (namestring
+                     (merge-pathnames
+                      relative-selector-pathname
+                      (uiop:ensure-directory-pathname cwd-pathname))))))))
          (previous (and (not explicitp)
                         (or (%client-selection-token conn)
                             *last-selected-worktree-token*)))
-         (explicit-worktree
-           (and explicitp
-                (%workspace-find-worktree-for-attach explicit organizations)))
          (explicit-repository
-           (and explicitp
-                (%workspace-find-repository-for-attach explicit organizations)))
+          (and explicitp
+               (or (%workspace-find-repository-for-attach explicit organizations)
+                   (and relative-path
+                        (%workspace-find-repository-for-attach
+                         relative-path organizations)))))
+         (same-repository-path-p
+          (and relative-path
+               explicit-repository
+               (equal relative-path
+                      (%workspace-canonical-path
+                       (nerimux/workspace-model:repository-local-path
+                        explicit-repository)))))
+         (explicit-worktree
+          (and explicitp
+               (not same-repository-path-p)
+               (or (%workspace-find-worktree explicit organizations)
+                   (if relative-selector-p
+                       (and relative-path
+                            (%workspace-find-worktree-for-attach
+                             relative-path organizations))
+                     (%workspace-find-worktree-for-attach
+                      explicit organizations)))))
          (cwd-worktree
-           (and (not explicitp)
-                (stringp cwd)
-                (plusp (length cwd))
-                (%workspace-find-worktree-for-cwd cwd organizations)))
+          (and (not explicitp)
+               (stringp cwd)
+               (plusp (length cwd))
+               (%workspace-find-worktree-for-cwd cwd organizations)))
          (previous-worktree
-           (and (not cwd-worktree)
-                previous
-                (%workspace-find-worktree previous organizations))))
+          (and (not cwd-worktree)
+               previous
+               (%workspace-find-worktree previous organizations))))
     (list :explicit explicit
           :explicit-p explicitp
-          :ambiguous-p (and explicit-worktree explicit-repository)
+          :ambiguous-p (and explicitp
+                            (not same-repository-path-p)
+                            (or (and explicit-worktree explicit-repository)
+                                (and relative-path explicit-repository)))
           :worktree (or explicit-worktree cwd-worktree previous-worktree)
           :source (cond (explicit-worktree :explicit)
                         (cwd-worktree :cwd)
