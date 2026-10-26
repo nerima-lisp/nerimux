@@ -58,10 +58,16 @@ printf 'remote behind\n' > "$origin_state/remote-behind.txt"
 jj_fixture -R "$origin_state" commit -m 'F-behind remote advance' >/dev/null
 jj_fixture -R "$origin_state" bookmark set main -r @- >/dev/null
 jj_fixture -R "$origin_state" git export >/dev/null
+jj_fixture -R "$origin_state" new main >/dev/null
+printf 'remote-only branch\n' > "$origin_state/remote-only.txt"
+jj_fixture -R "$origin_state" commit -m 'F-behind remote-only branch' >/dev/null
+jj_fixture -R "$origin_state" bookmark create fixture/remote-only -r @- >/dev/null
+jj_fixture -R "$origin_state" git export >/dev/null
 
 (cd "$repo" && jj_fixture -R "$repo" git remote remove origin >/dev/null)
 (cd "$repo" && jj_fixture -R "$repo" git remote add origin ../../../../support/behind-origin >/dev/null)
 (cd "$repo" && jj_fixture -R "$repo" git fetch --remote origin --branch main >/dev/null)
+(cd "$repo" && jj_fixture -R "$repo" git fetch --remote origin --branch fixture/remote-only >/dev/null)
 printf 'ref: refs/heads/main\n' > "$repo/.git/HEAD"
 awk '
   /^\[remote "origin"\]$/ { in_origin = 1; print; next }
