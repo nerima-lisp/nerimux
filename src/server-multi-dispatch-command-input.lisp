@@ -58,18 +58,24 @@
 
 (defun %client-command-buffer-append (conn payload)
   (let ((text (%client-payload-text payload)))
-    (when
-        (and text
-             (every
-              (lambda (character)
-                (not (nerimux/text:control-character-p character)))
-              text))
-      (setf (client-conn-command-buffer conn) (concatenate 'string
-                                                           (client-conn-command-buffer
-                                                            conn)
-                                                           text))
-      (%mark-dirty)
-      t)))
+    (cond
+      ((null text) nil)
+      ((some (lambda (character)
+               (nerimux/text:control-character-p character))
+             text)
+       (setf (client-conn-command-buffer conn) "")
+       (%client-notify
+        conn
+        "command input rejected: control characters are not allowed")
+       (%mark-dirty)
+       nil)
+      (t
+       (setf (client-conn-command-buffer conn)
+             (concatenate 'string
+                          (client-conn-command-buffer conn)
+                          text))
+       (%mark-dirty)
+       t))))
 
 (defvar *client-command-line-p* nil
   "True while a command typed at the `:' prompt is running, as opposed to one
