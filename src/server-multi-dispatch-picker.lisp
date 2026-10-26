@@ -130,7 +130,9 @@
        (values nil nil))
       ((getf resolution :worktree)
        (%client-consume-attach-target conn)
-       (%set-client-selected-worktree conn (getf resolution :worktree))
+       (progn
+          (%set-client-selected-worktree conn (getf resolution :worktree))
+          (%client-reveal-tree-selection conn))
        (values (getf resolution :worktree) (getf resolution :source)))
       ((getf resolution :repository)
        (%client-consume-attach-target conn)
