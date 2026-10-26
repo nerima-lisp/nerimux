@@ -92,6 +92,7 @@
          (:file "workspace-input-prefix-tests")
          (:file "workspace-panes-acceptance-tests")
          (:file "confirm-view-quit-tests")
+         (:file "server-multi-modal-stack-tests")
          (:file "attach-selector-resolution-tests")
          (:file "client-receive-tests")))))))
 
