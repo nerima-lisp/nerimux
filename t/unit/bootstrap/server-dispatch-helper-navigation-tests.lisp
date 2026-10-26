@@ -1055,7 +1055,7 @@
         (nerimux::%set-client-selected-worktree conn worktree)
         (expect (eq :untracked (nerimux::%select-client-tree-relative conn 1)))
         (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
-        (expect (equal (list :file "wt-status-nav" "new.txt" "??")
+        (expect (equal (list :file "wt-status-nav" "new.txt" "??" :untracked)
                        (nerimux::%select-client-tree-relative conn 1)))
         (expect (eq worktree (nerimux::client-conn-selected-worktree conn)))
         (expect (eq :untracked (nerimux::%select-client-tree-relative conn -1)))
