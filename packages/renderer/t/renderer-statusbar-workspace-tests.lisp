@@ -162,7 +162,7 @@
 
 (describe "renderer-suite/statusbar-workspace-degradation"
 
-  (it "elides the notification, then drops it, then tabs, then the repository name, as cols shrink"
+  (it "elides the notification, then tabs, then drops it, then the repository name, as cols shrink"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree :branch "feature/wide-enough-branch")
       (let ((messages
               (list "a very long notification that will not fit once things get tight"))
@@ -192,12 +192,44 @@
                      (setf no-repository cols)))
           (expect (and elided dropped no-tabs no-repository))
           (expect (> elided dropped))
-          (expect (> dropped no-tabs))
+          (expect (> no-tabs dropped))
           (expect (>= no-tabs no-repository))
           ;; The tail of the elided notification is the half that identifies it.
           (expect (search "tight" (compose (1- elided))))
           (expect (search "feature/wide-enough-branch" (compose 40)))
           (expect (search "CLEAN" (compose 40)))))))
+  (it "keeps pane failure messages visible with multiple windows"
+    (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
+           (pane-2 (nerimux/pane:make-pane :id 2 :fd -1))
+           (pane-3 (nerimux/pane:make-pane :id 3 :fd -1))
+           (window-1 (nerimux/window:make-window
+                      :id 1 :name "feature/beta" :panes (list pane-1 pane-2)))
+           (window-2 (nerimux/window:make-window
+                      :id 2 :name "feature/beta (2)" :panes (list pane-3)))
+           (worktree (nerimux/workspace-model:make-worktree
+                      :id "wt-notification-width"
+                      :path "/repo/wt"
+                      :branch "feature/beta"
+                      :status :fetched))
+           (repository (nerimux/workspace-model:make-repository
+                        :id "repo-notification-width"
+                        :specification "example.test/org/bare-repo"
+                        :local-path "/repo"
+                        :worktrees (list worktree))))
+      (setf (nerimux/pane:pane-window pane-1) window-1
+            (nerimux/pane:pane-window pane-2) window-1
+            (nerimux/pane:pane-window pane-3) window-2
+            (nerimux/workspace-model:worktree-repository worktree) repository)
+      (nerimux/pane:worktree-add-pane worktree pane-1)
+      (nerimux/pane:worktree-add-pane worktree pane-2)
+      (nerimux/pane:worktree-add-pane worktree pane-3)
+      (let ((line
+              (strip-sgr
+               (nerimux/renderer::%compose-workspace-status-line
+                pane-3 (list "no previous pane") 120))))
+        (expect (search "no previous pane" line))
+        (expect (not (search "win 1:" line)))
+        (expect (search "example.test/org/bare-repo · feature/beta" line)))))
 
   (it "never overflows COLS even at a pathologically narrow width"
     (multiple-value-bind (pane) (%fixture-pane-with-worktree)
