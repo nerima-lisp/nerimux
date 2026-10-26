@@ -1153,47 +1153,59 @@
                              (nerimux/pane:pane-window pane)))
                        (nerimux/window:window-panes target-window)))
         (expect (eq zoomed (nerimux::client-conn-focus conn-b))))))
-  (it "g3-previous-pane-from-peer-close-notifies-after-dispatched-toggle"
+  (it "g3-previous-pane-from-peer-close-client-wire-reports-no-previous-pane"
     (with-fake-two-pane-session (session)
-      (let* ((conn-a (%make-test-conn))
-             (conn-b (%make-test-conn))
-             (window (first (nerimux/session:session-windows session)))
-             (panes (nerimux/window:window-panes window))
-             (previous (first panes))
-             (current (second panes))
-             (dispatches nil)
-             (original-dispatch
-               (fdefinition (quote nerimux::%workspace-prefix-dispatch)))
-             (nerimux::*clients* (list conn-a conn-b)))
-        (setf (nerimux/pane:pane-fd previous) -1)
-        (nerimux::%set-client-focus conn-a previous)
-        (nerimux::%set-client-focus conn-a current)
-        (expect (eq previous
-                    (sb-ext:weak-pointer-value
-                     (nerimux::client-conn-previous-pane conn-a))))
-        (nerimux::%set-client-focus conn-b previous)
-        (with-stubbed-fdefinition
-            ((nerimux::%workspace-prefix-dispatch
-              (lambda (session conn byte)
-                (push (list conn byte) dispatches)
-                (funcall original-dispatch session conn byte))))
-          (nerimux::%handle-multi-key-message session conn-b #(17))
-          (nerimux::%handle-multi-key-message session conn-b #(120))
-          (expect (null (nerimux/pane:pane-window previous)))
-          (expect (not (member previous
-                               (nerimux/window:window-panes window)
-                               :test (function eq))))
-          (nerimux::%handle-multi-key-message session conn-a #(17))
-          (nerimux::%handle-multi-key-message session conn-a #(59)))
-        (expect (some (lambda (dispatch)
-                        (and (eq conn-a (first dispatch))
-                             (= 59 (second dispatch))))
-                      dispatches))
-        (expect (eq current (nerimux::client-conn-focus conn-a)))
-        (expect (eq window (nerimux/pane:pane-window current)))
-        (expect (member current (nerimux/window:window-panes window)
-                        :test (function eq)))
-        (expect (null (nerimux::client-conn-previous-pane conn-a)))
-        (expect (search "no previous pane"
-                        (first (nerimux::client-conn-message-log conn-a)))))))
+      (with-test-listener (listener path (%test-socket-path "peer-close-wire") :backlog 4)
+        (let* ((client-socket (nerimux/net:connect-to path))
+               (server-socket (and client-socket (nerimux/net:accept-connection listener)))
+               (nerimux::*clients* nil)
+               (conn-a (and server-socket (nerimux::%add-client server-socket)))
+               (conn-b (%make-test-conn))
+               (window (first (nerimux/session:session-windows session)))
+               (panes (nerimux/window:window-panes window))
+               (previous (first panes))
+               (current (second panes))
+               (dispatches nil)
+               (original-dispatch
+                 (fdefinition (quote nerimux::%workspace-prefix-dispatch))))
+          (setf nerimux::*clients* (remove nil (list conn-a conn-b)))
+          (unwind-protect
+               (when (and client-socket conn-a)
+                 (setf (nerimux/pane:pane-fd previous) -1)
+                 (nerimux::%set-client-focus conn-a previous)
+                 (nerimux::%set-client-focus conn-a current)
+                 (nerimux::%set-client-focus conn-b previous)
+                 (nerimux::%handle-multi-key-message session conn-b #(17))
+                 (nerimux::%handle-multi-key-message session conn-b #(120))
+                 (expect (null (nerimux/pane:pane-window previous)))
+                 (with-stubbed-fdefinition
+                     ((nerimux::read-available-octets
+                        (lambda (timeout-us max-octets)
+                          (declare (ignore timeout-us max-octets))
+                          #(17 59)))
+                      (nerimux::%workspace-prefix-dispatch
+                        (lambda (session conn byte)
+                          (push (list conn byte) dispatches)
+                          (funcall original-dispatch session conn byte))))
+                   (expect
+                    (nerimux::%forward-stdin-byte
+                     (nerimux/net:socket-stream client-socket)))
+                   (let ((ready
+                           (nerimux/pty:select-fds
+                            (list (nerimux::client-conn-fd conn-a)) 1000000)))
+                     (expect ready :to-be-truthy)
+                     (when ready
+                       (nerimux::%read-and-dispatch-client-message session conn-a))))
+                 (expect (some (lambda (dispatch)
+                                 (and (eq conn-a (first dispatch))
+                                      (= 59 (second dispatch))))
+                               dispatches))
+                 (expect (eq current (nerimux::client-conn-focus conn-a)))
+                 (expect (null (nerimux::client-conn-previous-pane conn-a)))
+                 (expect (search "no previous pane"
+                                 (first (nerimux::client-conn-message-log conn-a)))))
+            (when (and conn-a (member conn-a nerimux::*clients*))
+              (nerimux::%drop-client conn-a))
+            (dolist (socket (remove nil (list client-socket server-socket)))
+              (ignore-errors (nerimux/net:close-socket socket))))))))
   )
