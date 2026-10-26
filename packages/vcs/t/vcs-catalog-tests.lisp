@@ -36,11 +36,17 @@
                  :local-path source)))
          (%catalog-test-write-file
           (concatenate 'string source ".gitattributes")
-          "conflict.txt -merge")
+          (format nil "conflict.txt merge=binary~%"))
          (%catalog-test-write-file (concatenate 'string source "conflict.txt")
                                    "base\n")
          (%worktree-path-test-git source "add" ".gitattributes" "conflict.txt")
          (%catalog-test-commit source "base")
+         (let ((merge-attribute
+                (%worktree-path-test-git
+                 source "check-attr" "merge" "--" "conflict.txt")))
+           (unless (string= "conflict.txt: merge: binary" merge-attribute)
+             (format *error-output* "merge attribute: ~S~%" merge-attribute))
+           (expect (string= "conflict.txt: merge: binary" merge-attribute)))
          (%worktree-path-test-git source "worktree" "add" "-b"
                                    "dirty-only" control "HEAD")
          (%catalog-test-write-file (concatenate 'string control "dirty.txt")
