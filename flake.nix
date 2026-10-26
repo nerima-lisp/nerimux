@@ -348,7 +348,10 @@
             src = self;
 
             nativeBuildInputs = [ pkgs.makeWrapper ];
-            buildInputs = [ sbcl pkgs.git ];
+            buildInputs = [
+              sbcl
+              pkgs.git
+            ];
 
             buildPhase = ''
               runHook preBuild
