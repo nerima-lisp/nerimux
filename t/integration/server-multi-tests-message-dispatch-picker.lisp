@@ -719,7 +719,7 @@
              (run-git "-C" (namestring bare) "worktree" "add"
                       "-b" "feature/alpha" (namestring alpha) "main")
              (with-temporary-posix-environment-variable
-                 ("GHQ_ROOT" (namestring ghq-root))
+                 ("GHQ_ROOT" (namestring (truename ghq-root)))
                (with-stubbed-fdefinition
                    ((vcs-kit:ghq-list-repositories
                      (lambda (&rest arguments)
@@ -727,7 +727,10 @@
                        (sb-thread:signal-semaphore entered)
                        (unless (sb-thread:wait-on-semaphore resume :timeout 30)
                          (error "Timed out waiting for attach dispatch before ghq scan"))
-                       (apply real-ghq-list arguments))))
+                       (apply real-ghq-list arguments)))
+                    (nerimux/vcs:ghq-root-directory
+                     (lambda ()
+                       (namestring (truename ghq-root)))))
                  (unwind-protect
                       (progn
                         (nerimux::%drain-main-thread-callbacks)
