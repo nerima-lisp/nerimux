@@ -342,6 +342,65 @@
             };
           };
 
+          nerimux-test-local-clone = pkgs.stdenv.mkDerivation {
+            pname = "nerimux-test-local-clone";
+            inherit version;
+            src = self;
+
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            buildInputs = [ sbcl pkgs.git ];
+
+            buildPhase = ''
+              runHook preBuild
+              export HOME=$TMPDIR
+
+              ${sbcl}/bin/sbcl \
+                --no-sysinit \
+                --no-userinit \
+                --eval "(require :asdf)" \
+                --eval "(sb-impl::module-provide-contrib :sb-posix)" \
+                --eval "(asdf:register-preloaded-system \"sb-posix\")" \
+                --eval "(setf asdf/source-registry:*source-registry* (make-hash-table :test (function equal)))" \
+                --eval "(push (truename \".\") asdf:*central-registry*)" \
+                ${siblingRegistryPushEvals system} \
+                ${packagesRegistryPushEval} \
+                --eval "(asdf:load-system \"nerimux\")" \
+                --load ${./tests/live/cases/l4-25-test-only-clone.lisp} \
+                --eval "(sb-ext:save-lisp-and-die \"nerimux.core\"
+                           :toplevel #'nerimux:main
+                           :executable nil
+                           :compression t)" \
+                --quit
+              runHook postBuild
+            '';
+
+            installPhase = ''
+              runHook preInstall
+              mkdir -p $out/lib/nerimux $out/bin
+
+              cp nerimux.core $out/lib/nerimux/
+
+              # Keep all Git subprocesses in this test-only binary local-only.
+              makeWrapper ${sbcl}/bin/sbcl $out/bin/nerimux \
+                --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.git ]} \
+                --set GIT_ALLOW_PROTOCOL file \
+                --set GIT_PROTOCOL_FROM_USER 1 \
+                --set GIT_CONFIG_NOSYSTEM 1 \
+                --set GIT_CONFIG_GLOBAL /dev/null \
+                --set GIT_CONFIG_COUNT 0 \
+                --set GIT_TERMINAL_PROMPT 0 \
+                --add-flags "--noinform --core $out/lib/nerimux/nerimux.core --no-sysinit --no-userinit"
+              runHook postInstall
+            '';
+
+            meta = {
+              description = "Test-only nerimux binary for the local clone fixture";
+              homepage = "https://github.com/nerima-lisp/nerimux";
+              license = pkgs.lib.licenses.mit;
+              mainProgram = "nerimux";
+            };
+          };
+
           default = nerimux;
 
           # Build the published docs offline with strict link and nav checks.
@@ -539,6 +598,15 @@
             program = "${self.packages.${system}.nerimux}/bin/nerimux";
             meta = {
               description = "nerimux, a git-worktree workspace multiplexer in Common Lisp";
+              mainProgram = "nerimux";
+            };
+          };
+
+          test-local-clone = {
+            type = "app";
+            program = "${self.packages.${system}.nerimux-test-local-clone}/bin/nerimux";
+            meta = {
+              description = "Run the test-only local clone fixture binary";
               mainProgram = "nerimux";
             };
           };
