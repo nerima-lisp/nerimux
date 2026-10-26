@@ -69,7 +69,7 @@
   :bug-tracker "https://github.com/nerima-lisp/nerimux/issues"
   :source-control (:git "https://github.com/nerima-lisp/nerimux.git")
   :depends-on ("nerimux-renderer" "nerimux-model/test" "nerimux-terminal/test"
-               "nerimux-picker/test" (:version "cl-weave" "1.4.0"))
+               "nerimux-picker/test" "nerimux-commands" (:version "cl-weave" "1.4.0"))
   :pathname "t"
   :serial t
   :components ((:file "package")

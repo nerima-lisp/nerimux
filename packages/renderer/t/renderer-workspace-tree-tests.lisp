@@ -573,9 +573,10 @@
 
 (describe "renderer-suite/workspace-tree-info-cluster"
 
-  (it "shows terminal count without confusing terminal exit with agent exit"
-    (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd -1))
-           (pane-2 (nerimux/pane:make-pane :id 2 :fd -1 :process-exited-p t))
+  (it "shows total shell count separately from the number of exited panes"
+    (let* ((pane-1 (nerimux/pane:make-pane :id 1 :fd 41 :pid 42))
+           (pane-2 (nerimux/pane:make-pane :id 2 :fd 51 :pid 52))
+           (closed-identifiers nil)
            (window
              (nerimux/window:make-window
               :id 1 :name "info" :panes (list pane-1 pane-2)))
@@ -595,15 +596,30 @@
             (nerimux/pane:pane-window pane-2) window)
       (nerimux/pane:worktree-add-pane worktree pane-1)
       (nerimux/pane:worktree-add-pane worktree pane-2)
+      (let ((nerimux/ports:*close-pty*
+              (lambda (fd pid)
+                (setf closed-identifiers (list fd pid))
+                (values 0 :exited))))
+        (nerimux/commands:close-pane-pty pane-2))
+      (expect (equal (list 51 52) closed-identifiers))
+      (expect (nerimux/pane:pane-live-p pane-1))
+      (expect (not (nerimux/pane:pane-live-p pane-2)))
+      (expect (nerimux/pane:pane-process-exited-p pane-2))
       (setf (nerimux/pane:pane-last-output-time pane-1)
+            (- (get-universal-time) 300)
+            (nerimux/pane:pane-last-focused-time pane-1)
+            (- (get-universal-time) 300)
+            (nerimux/pane:pane-last-output-time pane-2)
+            (- (get-universal-time) 300)
+            (nerimux/pane:pane-last-focused-time pane-2)
             (- (get-universal-time) 300))
       (let* ((frame
                (nerimux/renderer:render-workspace-overview-to-string
                 (list organization) 24 100))
              (plain (strip-sgr frame)))
         (expect (search "↑2" plain))
-        (expect (search "2 shells" plain))
-        (expect (search "exited" plain))
+        (expect (search "2 shells (1 exited)" plain))
+        (expect (not (search "2 shells exited" plain)))
         (expect (search "dirty" plain))
         (expect (not (search "agent EXITED" plain)))
         (expect (search "5m" plain)))))
@@ -791,7 +807,7 @@
       (let ((worktree (nerimux/workspace-model:make-worktree :status t :dirty-p t)))
         (nerimux/pane:worktree-add-pane worktree
           (nerimux/pane:make-pane :agent-kind :claude :process-exited-p t))
-        (expect (string= "exited agent EXITED dirty"
+        (expect (string= "agent EXITED dirty"
                          (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
   (it "shows exited agent lifecycle when process exit also marks it waiting"
       (let* ((worktree (nerimux/workspace-model:make-worktree :status t))
@@ -801,7 +817,7 @@
         (expect (nerimux/workspace-model:worktree-waiting-p worktree))
         (expect (eq :exited (nerimux/pane:worktree-agent-state worktree)))
         (expect
-         (search "exited agent EXITED"
+         (search "agent EXITED"
                  (nerimux/renderer::%worktree-tree-info-suffix worktree 100)))))
   (it "keeps a running agent visible when the workspace is completed"
       (let ((worktree (nerimux/workspace-model:make-worktree :status t :completed-p t)))
