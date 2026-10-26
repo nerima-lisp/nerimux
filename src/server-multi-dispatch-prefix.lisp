@@ -368,7 +368,10 @@
   (#\L (%workspace-prefix-previous-window session conn))
   (16 (%open-client-picker conn) nil)
   (#\q (%handle-client-input-key-payload
-         session conn (vector (client-conn-workspace-prefix-code conn))))
+         session conn
+         (make-array 1
+                     :element-type (quote (unsigned-byte 8))
+                     :initial-element (client-conn-workspace-prefix-code conn))))
   (#\w (%workspace-prefix-open-overview session conn))
   (#\t (%client-open-selected-worktree-command session conn nil))
   (#\[ (%workspace-prefix-open-scrollback session conn))
