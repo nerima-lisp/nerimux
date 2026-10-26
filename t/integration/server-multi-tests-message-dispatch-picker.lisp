@@ -409,6 +409,41 @@
         (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
         (expect (string= (subseq utf8-query 0 200)
                          (nerimux::client-conn-picker-query conn))))))
+  (it "picker-query-key-dispatch-keeps-the-200th-character"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (query (make-string 205 :initial-element (code-char 120)))
+             (expected (subseq query 0 200)))
+        (setf (nerimux::client-conn-modal conn) :picker)
+        (loop repeat 205
+              do (nerimux::%handle-multi-key-message s conn #(120)))
+        (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
+        (expect (string= expected
+                         (nerimux::client-conn-picker-query conn)))
+        (nerimux::%handle-multi-key-message s conn #(121))
+        (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
+        (expect (string= expected
+                         (nerimux::client-conn-picker-query conn))))))
+  (it "picker-query-bracketed-paste-dispatch-keeps-the-200-character-limit"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (query (make-string 205 :initial-element (code-char 120)))
+             (expected (subseq query 0 200))
+             (escape (string (code-char 27)))
+             (payload
+               (cl-codec-kit:string-to-octets
+                (concatenate 'string
+                             escape "[200~"
+                             query
+                             escape "[201~")
+                :encoding :utf-8)))
+        (setf (nerimux::client-conn-modal conn) :picker)
+        (nerimux::%handle-multi-client-message
+         nerimux::+msg-key+ payload s conn)
+        (expect (= 200 (length (nerimux::client-conn-picker-query conn))))
+        (expect (string= expected
+                         (nerimux::client-conn-picker-query conn)))
+        (expect (null (nerimux::client-conn-paste-active-p conn))))))
   (it "attach-selector-query-inputs-are-capped-at-200-characters-and-notifies-on-truncation"
     (with-fake-session (s)
       (expect s)

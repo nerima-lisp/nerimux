@@ -498,6 +498,13 @@
          non-string-query-surface 16 80 items 42 0 nil)
         (expect (search "42" (cl-tui-kit/core:surface-string
                                non-string-query-surface))))))
+  (it "picker-query-display: renders all 200 query characters"
+    (let* ((query (format nil "~A!" (make-string 199 :initial-element #\x)))
+           (surface
+             (nerimux/renderer::%surface-from-ansi-frame "" 16 240)))
+      (nerimux/renderer::%render-picker-widget
+       surface 16 240 nil query 0 nil)
+      (expect (search query (cl-tui-kit/core:surface-string surface)))))
 
   (it "routes client picker mode through the public tui renderer"
     (let ((output
