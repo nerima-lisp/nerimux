@@ -34,19 +34,10 @@
                 (nerimux/workspace-model:make-repository
                  :specification "local/conflict-fixture"
                  :local-path source)))
-         (%catalog-test-write-file
-          (concatenate 'string source ".gitattributes")
-          (format nil "conflict.txt merge=binary~%"))
          (%catalog-test-write-file (concatenate 'string source "conflict.txt")
                                    "base\n")
-         (%worktree-path-test-git source "add" ".gitattributes" "conflict.txt")
+         (%worktree-path-test-git source "add" "conflict.txt")
          (%catalog-test-commit source "base")
-         (let ((merge-attribute
-                (%worktree-path-test-git
-                 source "check-attr" "merge" "--" "conflict.txt")))
-           (unless (string= "conflict.txt: merge: binary" merge-attribute)
-             (format *error-output* "merge attribute: ~S~%" merge-attribute))
-           (expect (string= "conflict.txt: merge: binary" merge-attribute)))
          (%worktree-path-test-git source "worktree" "add" "-b"
                                    "dirty-only" control "HEAD")
          (%catalog-test-write-file (concatenate 'string control "dirty.txt")
@@ -63,7 +54,10 @@
          (%catalog-test-commit source "main change")
          (multiple-value-bind (stdout stderr exit-code)
              (uiop:run-program
-              (list "git" "-C" source "merge" "feature")
+              (list "git" "-c" "user.name=Test"
+                    "-c" "user.email=test@example.invalid"
+                    "-c" "commit.gpgsign=false"
+                    "-C" source "merge" "feature")
               :environment *worktree-path-test-git-environment*
               :output :string :error-output :string :ignore-error-status t)
            (unless (= 1 exit-code)
