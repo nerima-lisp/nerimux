@@ -163,28 +163,15 @@
   "Columns a notification needs before eliding it beats dropping it: below
    this the ellipsis and the fragment behind it name nothing to act on.")
 
-(defun %compose-workspace-status-line (focus-pane messages
-                                                  cols
-                                                  &key
-                                                  (mode nil))
+(defun %compose-workspace-status-line (focus-pane messages cols &key (mode nil))
   "Assemble the R6.5 status line, dropping blocks right-to-left when COLS is
-   too narrow: a notification too long for the room left over is first
-   elided from the front (%MESSAGE-STRIP-TEXT) and only dropped when even
-   +STATUS-MESSAGE-COLUMNS-FLOOR+ columns are unavailable, since a pane
-   forwards every key to the shell and the strip is the only place an action
-   it refused can report itself. Then the window/pane tabs, then the
-   repository name, branch and state token are never dropped (design doc
-   §11). The MODE chip (FR-003, %STATUS-MODE-CHIP) is placed ahead of all
-   three and is never dropped by width degradation: it is a safety feature
-   (whether a keystroke reaches the shell), not a display convenience, so it
-   must survive as far into a narrow terminal as the fields design doc §11
-   already protects. Being first also means the final %VISIBLE-TRUNCATE
-   safety net below the terminal's 40-column floor (R6.10 already refuses
-   anything narrower) keeps it, since that truncation keeps a string's
-   prefix. Separately from width, MODE-CHIP itself is NIL when MODE is NIL
-   (%STATUS-MODE-CHIP), and the REMOVE NIL below drops a NIL entry from the
-   assembled list with no gap -- that is MODE having nothing to report, not
-   a degradation step, so it happens identically at every COLS width."
+   too narrow. Keep a notification in the right block by dropping the window
+   and pane tabs before dropping the message itself, since a pane forwards every
+   key to the shell and the strip is the only place a refused action can report
+   itself. The MODE chip (FR-003, %STATUS-MODE-CHIP) stays ahead of all three
+   and is never dropped by width degradation: it names whether a keystroke
+   reaches the shell. The repository name, branch and state token remain after
+   the tabs and notification have been dropped."
   (let ((middle (%status-middle-text focus-pane))
         (mode-chip (%status-mode-chip mode)))
     (labels ((assemble (include-repository-p include-middle-p right)
@@ -200,7 +187,9 @@
       (let* ((right (%status-right-text messages))
              (full (assemble t t right))
              (no-notification (assemble t t nil))
-             (room (- cols (%visible-length no-notification) 2)))
+             (no-tabs (assemble t nil nil))
+             (room (- cols (%visible-length no-notification) 2))
+             (no-tabs-room (- cols (%visible-length no-tabs) 2)))
         (cond
           ((<= (%visible-length full) cols) full)
           ((and messages (>= room +status-message-columns-floor+))
@@ -208,12 +197,16 @@
                      t
                      (%status-right-text
                       (list (%message-strip-text (first messages) room)))))
+          ((and messages (>= no-tabs-room +status-message-columns-floor+))
+           (assemble t
+                     nil
+                     (%status-right-text
+                      (list (%message-strip-text (first messages) no-tabs-room)))))
           ((<= (%visible-length no-notification) cols) no-notification)
           (t
-           (let ((no-tabs (assemble t nil nil)))
-             (if (<= (%visible-length no-tabs) cols)
-                 no-tabs
-                 (%visible-truncate (assemble nil nil nil) cols)))))))))
+           (if (<= (%visible-length no-tabs) cols)
+               no-tabs
+               (%visible-truncate (assemble nil nil nil) cols))))))))
 
 (defun %render-status-line (stream status-row sgr-code line &optional cols)
   "Emit a fully-composed status LINE at STATUS-ROW, wrapped in SGR-CODE, then
