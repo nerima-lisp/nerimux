@@ -424,11 +424,13 @@ holding an exited pane, and blank otherwise. Only the last four of those also
 place the worktree under Attention; the first three mark it in place. A
 repository or organization row carries `!` when anything beneath it does.
 
-Process exit or a BEL or recognized terminal notification marks an agent
-`WAITING`; focusing its pane clears that state. Unread output on an
-unfocused pane marks that pane, and leaves its worktree under Active rather
-than moving it to Attention. `agent EXITED` reports the agent lifecycle;
-`exited` on an expanded pane row reports that pane's process state.
+Process exit or a BEL or recognized terminal notification marks the worktree
+as waiting. While its agent remains live, the cluster shows `agent WAITING`;
+after the process exits, it shows `agent EXITED`, even while the worktree
+remains under Attention. Focusing the pane clears the waiting state. Unread
+output on an unfocused pane marks that pane and leaves its worktree under
+Active rather than moving it to Attention. On an expanded pane row, `exited`
+reports only that pane's process state.
 
 A pane row names what it runs, the agent or `shell`, and adds `exited` once
 its process is gone. A changed-file row names its state as a word, `modified`,
