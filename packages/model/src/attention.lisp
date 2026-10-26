@@ -21,6 +21,8 @@
         (push :behind reasons))
       (when (worktree-missing-p worktree)
         (push :missing reasons))
+      (when (worktree-read-error-p worktree)
+        (push :read-error reasons))
       (when (nerimux/workspace-model:worktree-waiting-p worktree)
         (push :waiting reasons))
       (when (some #'%pane-escalates-to-worktree-p (worktree-panes worktree))

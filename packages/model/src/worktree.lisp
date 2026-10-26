@@ -4,7 +4,7 @@
             (:constructor %make-worktree
                 (&key id repository path branch head status panes dirty-p
                       conflict-p ahead behind locked-p prunable-p
-                      missing-p changed-files additions deletions
+                      missing-p read-error-p changed-files additions deletions
                       recent-commits commits-state
                       staged-files unstaged-files untracked-files
                       unmerged-files stashes stashes-state completed-p agent-pane
@@ -26,6 +26,7 @@
   (locked-p nil :type boolean)
   (prunable-p nil :type boolean)
   (missing-p nil :type boolean)
+  (read-error-p nil :type boolean)
   (changed-files nil :type list)
   (additions 0 :type integer)
   (deletions 0 :type integer)
@@ -63,6 +64,7 @@
                            locked-p
                            prunable-p
                            missing-p
+                           read-error-p
                            changed-files
                            (additions 0)
                            (deletions 0)
@@ -113,6 +115,8 @@
                     (not (null prunable-p))
                     :missing-p
                     (not (null missing-p))
+                    :read-error-p
+                    (not (null read-error-p))
                     :changed-files
                     (copy-list changed-files)
                     :additions
@@ -189,6 +193,8 @@
       ((or (some #'nerimux/pane:pane-live-p (worktree-panes worktree))
            (nerimux/pane:pane-live-p (worktree-agent-pane worktree)))
        (values :excluded :live-pane))
+      ((worktree-read-error-p worktree)
+       (values :excluded :read-error))
       ;; A worktree whose directory is gone holds no work to lose, so it is
       ;; repairable whether or not its agent ever reported completion.
       ((worktree-missing-p worktree)

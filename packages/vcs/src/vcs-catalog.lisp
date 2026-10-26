@@ -178,8 +178,39 @@ vcs-inspect.lisp for the race this closes."
         #'string=))
 
 (defun %preserve-worktree-state (source target)
+  "Carry cached status and interaction state from SOURCE onto TARGET."
   (setf (nerimux/workspace-model:worktree-id target)
         (nerimux/workspace-model:worktree-id source)
+        (nerimux/workspace-model:worktree-status target)
+        (nerimux/workspace-model:worktree-status source)
+        (nerimux/workspace-model:worktree-head target)
+        (nerimux/workspace-model:worktree-head source)
+        (nerimux/workspace-model:worktree-dirty-p target)
+        (nerimux/workspace-model:worktree-dirty-p source)
+        (nerimux/workspace-model:worktree-conflict-p target)
+        (nerimux/workspace-model:worktree-conflict-p source)
+        (nerimux/workspace-model:worktree-ahead target)
+        (nerimux/workspace-model:worktree-ahead source)
+        (nerimux/workspace-model:worktree-behind target)
+        (nerimux/workspace-model:worktree-behind source)
+        (nerimux/workspace-model:worktree-missing-p target)
+        (nerimux/workspace-model:worktree-missing-p source)
+        (nerimux/workspace-model:worktree-read-error-p target)
+        (nerimux/workspace-model:worktree-read-error-p source)
+        (nerimux/workspace-model:worktree-changed-files target)
+        (nerimux/workspace-model:worktree-changed-files source)
+        (nerimux/workspace-model:worktree-additions target)
+        (nerimux/workspace-model:worktree-additions source)
+        (nerimux/workspace-model:worktree-deletions target)
+        (nerimux/workspace-model:worktree-deletions source)
+        (nerimux/workspace-model:worktree-staged-files target)
+        (nerimux/workspace-model:worktree-staged-files source)
+        (nerimux/workspace-model:worktree-unstaged-files target)
+        (nerimux/workspace-model:worktree-unstaged-files source)
+        (nerimux/workspace-model:worktree-untracked-files target)
+        (nerimux/workspace-model:worktree-untracked-files source)
+        (nerimux/workspace-model:worktree-unmerged-files target)
+        (nerimux/workspace-model:worktree-unmerged-files source)
         (nerimux/workspace-model:worktree-commits-state target)
         (nerimux/workspace-model:worktree-commits-state source)
         (nerimux/workspace-model:worktree-recent-commits target)
@@ -202,28 +233,15 @@ vcs-inspect.lisp for the race this closes."
         (nerimux/workspace-model:worktree-waiting-host-notified-p source)))
 
 (defun %preserve-worktree-commit-state (previous current)
-  "Carry ID, COMMITS-STATE and RECENT-COMMITS from PREVIOUS's worktrees onto
-CURRENT's, matched by path (F1). A full catalog rescan (SCAN-REPOSITORIES)
-builds an entirely fresh ORGANIZATION/REPOSITORY/WORKTREE struct per ghq
-entry, so %APPLY-REPOSITORY-WORKTREES's own old-worktree lookup -- which
-only ever sees worktrees already attached to the SAME repository struct --
-never finds a match there, and every full rescan silently dropped any
-already-fetched commit history, and let a fresh WORKTREE-KEY-derived id
-(which embeds HEAD, see worktree.lisp) replace the one a client, or a
-diff/expansion cache keyed on it, may already be holding (F1b). This is
-the same shape as %PRESERVE-PANE-ASSOCIATIONS above, run over the same
-PREVIOUS/CURRENT pair, but keyed on path alone since a worktree carries no
-stable identity of its own before its first publish.
+  "Carry worktree identity and cached state from PREVIOUS onto CURRENT by path.
 
-CHANGED-FILES, and likewise its Unit MODEL partition -- STAGED-FILES,
-UNSTAGED-FILES, UNTRACKED-FILES, UNMERGED-FILES -- are deliberately NOT
-carried here: they come fresh from the status pass that follows every
-publish, and carrying a stale value would show a client files the working
-tree no longer actually has changed. STASHES/STASHES-STATE, like
-COMMITS-STATE/RECENT-COMMITS, ARE carried: nothing in the status pass
-repopulates them, they are only ever written by an explicit on-demand
-fetch, so without this they would be silently dropped by every full
-rescan exactly as commit history was before this function existed."
+A full catalog rescan creates fresh worktree objects, so the next status pass may
+fail before replacing the cached snapshot. Preserve status, head, flags, and
+file summaries so a read error can leave the last successful status visible.
+A successful status update replaces those cached fields. Commit history,
+stashes, completion state, and waiting state also survive the rescan because
+the status pass does not repopulate them. Pane associations are preserved
+separately."
   (let ((previous-worktrees (%catalog-worktrees previous)))
     (dolist (worktree (%catalog-worktrees current))
       (let ((match
@@ -288,21 +306,52 @@ rescan exactly as commit history was before this function existed."
                    (parse-integer name :start 9 :end 15))
                 suffix))))))
 
-(defun %worktree-creation-key-newer-p (left right)
-  (and left
-       (or (null right)
-           (> (car left) (car right))
-           (and (= (car left) (car right))
-                (> (cdr left) (cdr right))))))
+(defun %worktree-activity-newer-p (left right)
+  (flet ((creation-key-newer-p (left right)
+           (let ((left-key (%worktree-creation-key left))
+                 (right-key (%worktree-creation-key right)))
+             (and left-key
+                  (or (null right-key)
+                      (> (car left-key) (car right-key))
+                      (and (= (car left-key) (car right-key))
+                           (> (cdr left-key) (cdr right-key)))))))
+         (activity-time (worktree)
+           (let ((latest nil))
+             (dolist
+                 (pane
+                  (append
+                   (nerimux/workspace-model:worktree-panes worktree)
+                   (list
+                    (nerimux/workspace-model:worktree-agent-pane worktree))))
+               (when pane
+                 (dolist
+                     (time
+                      (list
+                       (nerimux/pane:pane-last-output-time pane)
+                       (nerimux/pane:pane-last-focused-time pane)))
+                   (when (and (numberp time)
+                              (or (null latest) (> time latest)))
+                     (setf latest time)))))
+             latest)))
+    (let ((left-time (activity-time left))
+          (right-time (activity-time right)))
+      (cond
+        ((and left-time right-time)
+         (if (= left-time right-time)
+             (creation-key-newer-p left right)
+             (> left-time right-time)))
+        (left-time t)
+        (right-time nil)
+        (t (creation-key-newer-p left right))))))
 
-(defun %sort-workspace-worktrees-by-creation (organizations)
+(defun %sort-workspace-worktrees-by-activity (organizations)
   (dolist (organization organizations)
     (dolist (repository
              (nerimux/workspace-model:organization-repositories organization))
       (setf (nerimux/workspace-model:repository-worktrees repository)
             (stable-sort
              (copy-list (nerimux/workspace-model:repository-worktrees repository))
-             #'%worktree-creation-key-newer-p :key #'%worktree-creation-key))))
+             #'%worktree-activity-newer-p))))
   organizations)
 
 (defvar *workspace-catalog-generation* nil)
@@ -373,7 +422,7 @@ the user can still see (getting-started.md's row-mark table)."
       (%preserve-pane-associations previous current)
       (%preserve-worktree-commit-state previous current)
       (setf *workspace-organizations*
-            (%sort-workspace-worktrees-by-creation *workspace-organizations*)))))
+            (%sort-workspace-worktrees-by-activity *workspace-organizations*)))))
 
 (defun %repository-already-present-p (repository organizations)
   (let ((local-path (nerimux/workspace-model:repository-local-path repository))

@@ -58,6 +58,7 @@
                      #:worktree-key
                      #:worktree-locked-p
                      #:worktree-missing-p
+                     #:worktree-read-error-p
                      #:worktree-p
                      #:worktree-panes
                      #:worktree-path

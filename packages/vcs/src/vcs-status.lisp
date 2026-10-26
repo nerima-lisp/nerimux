@@ -308,30 +308,40 @@ once reads it exactly once and passes the same reading down (see
         (%make-worktree-status-update
          :path path :missing-p t :head fallback-head :ahead 0 :behind 0
          :additions 0 :deletions 0)
-        (let* ((snapshot
-                 (%git-status-snapshot directory))
-               (entries (vcs-kit:vcs-status-snapshot-entries snapshot))
-               (branch-head
-                 (vcs-kit:vcs-status-snapshot-branch-head snapshot))
-               (stash-reading
-                 (if stashes-supplied-p stashes (%read-stashes-at directory))))
-          (multiple-value-bind (additions deletions)
-              (if (some (function %numstat-eligible-entry-p) entries)
-                  (%worktree-status-diff-line-counts directory entries)
-                  (values 0 0))
-            (%make-worktree-status-update
-             :path path :snapshot snapshot
-             :head (or branch-head fallback-head)
-             :dirty-p (not (null entries))
-             :conflict-p (not (null (some #'%status-entry-conflict-p entries)))
-             :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
-             ;; cl-vcs-kit currently copies Git's signed -<behind> field into
-             ;; its backend-neutral snapshot; nerimux stores the count.
-             :behind (abs (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0))
-             :additions additions
-             :deletions deletions
-             :changed-files (%worktree-status-changed-files entries)
-             :stashes stash-reading))))))
+        (handler-case
+            (let* ((snapshot
+                     (%git-status-snapshot directory))
+                   (entries (vcs-kit:vcs-status-snapshot-entries snapshot))
+                   (branch-head
+                     (vcs-kit:vcs-status-snapshot-branch-head snapshot))
+                   (stash-reading
+                     (if stashes-supplied-p stashes
+                         (%read-stashes-at directory))))
+              (multiple-value-bind (additions deletions)
+                  (if (some (function %numstat-eligible-entry-p) entries)
+                      (%worktree-status-diff-line-counts directory entries)
+                      (values 0 0))
+                (%make-worktree-status-update
+                 :path path :snapshot snapshot
+                 :head (or branch-head fallback-head)
+                 :dirty-p (not (null entries))
+                 :conflict-p (not (null (some (function %status-entry-conflict-p) entries)))
+                 :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
+                 ;; cl-vcs-kit currently copies the signed behind field into
+                 ;; its backend-neutral snapshot; nerimux stores the count.
+                 :behind (abs (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0))
+                 :additions additions
+                 :deletions deletions
+                 :changed-files (%worktree-status-changed-files entries)
+                 :stashes stash-reading)))
+          (%git-read-error (condition)
+            (log-kit:emit-log
+             *vcs-diagnostic-logger*
+             log-kit:+level-warn+
+             (format nil "Git status could not be read in ~A" directory)
+             (list :directory directory
+                   :condition (princ-to-string condition)))
+            (%make-worktree-status-update :path path :read-error-p t))))))
 
 (defun %read-worktree-status (worktree &key (stashes nil stashes-supplied-p))
   "As %READ-WORKTREE-STATUS-AT, resolving WORKTREE's own path/head/repository
@@ -373,35 +383,40 @@ check discarded stayed behind and was applied next to a different snapshot."
     (unless worktree
       (error "Status update refers to an unknown worktree: ~A"
              (%worktree-status-update-path update)))
-    (setf (nerimux/workspace-model:worktree-missing-p worktree)
-          (%worktree-status-update-missing-p update)
-          (nerimux/workspace-model:worktree-status worktree)
-          (%worktree-status-update-snapshot update)
-          (nerimux/workspace-model:worktree-head worktree)
-          (%worktree-status-update-head update)
-          (nerimux/workspace-model:worktree-dirty-p worktree)
-          (%worktree-status-update-dirty-p update)
-          (nerimux/workspace-model:worktree-conflict-p worktree)
-          (%worktree-status-update-conflict-p update)
-          (nerimux/workspace-model:worktree-ahead worktree)
-          (%worktree-status-update-ahead update)
-          (nerimux/workspace-model:worktree-behind worktree)
-          (%worktree-status-update-behind update)
-          (nerimux/workspace-model:worktree-additions worktree)
-          (%worktree-status-update-additions update)
-          (nerimux/workspace-model:worktree-deletions worktree)
-          (%worktree-status-update-deletions update)
-          (nerimux/workspace-model:worktree-changed-files worktree)
-          (%worktree-status-update-changed-files update)
-          (nerimux/workspace-model:worktree-untracked-files worktree)
-          (%worktree-status-untracked-files entries)
-          (nerimux/workspace-model:worktree-unmerged-files worktree)
-          (%worktree-status-unmerged-files entries)
-          (nerimux/workspace-model:worktree-staged-files worktree)
-          (%worktree-status-staged-files entries)
-          (nerimux/workspace-model:worktree-unstaged-files worktree)
-          (%worktree-status-unstaged-files entries))
-    (%apply-worktree-stash-reading worktree update)
+    (if (%worktree-status-update-read-error-p update)
+        (setf (nerimux/workspace-model:worktree-missing-p worktree) nil
+              (nerimux/workspace-model:worktree-read-error-p worktree) t)
+        (progn
+          (setf (nerimux/workspace-model:worktree-missing-p worktree)
+                (%worktree-status-update-missing-p update)
+                (nerimux/workspace-model:worktree-read-error-p worktree) nil
+                (nerimux/workspace-model:worktree-status worktree)
+                (%worktree-status-update-snapshot update)
+                (nerimux/workspace-model:worktree-head worktree)
+                (%worktree-status-update-head update)
+                (nerimux/workspace-model:worktree-dirty-p worktree)
+                (%worktree-status-update-dirty-p update)
+                (nerimux/workspace-model:worktree-conflict-p worktree)
+                (%worktree-status-update-conflict-p update)
+                (nerimux/workspace-model:worktree-ahead worktree)
+                (%worktree-status-update-ahead update)
+                (nerimux/workspace-model:worktree-behind worktree)
+                (%worktree-status-update-behind update)
+                (nerimux/workspace-model:worktree-additions worktree)
+                (%worktree-status-update-additions update)
+                (nerimux/workspace-model:worktree-deletions worktree)
+                (%worktree-status-update-deletions update)
+                (nerimux/workspace-model:worktree-changed-files worktree)
+                (%worktree-status-update-changed-files update)
+                (nerimux/workspace-model:worktree-untracked-files worktree)
+                (%worktree-status-untracked-files entries)
+                (nerimux/workspace-model:worktree-unmerged-files worktree)
+                (%worktree-status-unmerged-files entries)
+                (nerimux/workspace-model:worktree-staged-files worktree)
+                (%worktree-status-staged-files entries)
+                (nerimux/workspace-model:worktree-unstaged-files worktree)
+                (%worktree-status-unstaged-files entries))
+          (%apply-worktree-stash-reading worktree update)))
     worktree))
 
 (defun worktree-upstream (worktree)

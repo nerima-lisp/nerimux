@@ -108,6 +108,7 @@
              (:constructor %make-worktree-status-update))
   (path nil :read-only t)
   (missing-p nil :read-only t)
+  (read-error-p nil :read-only t)
   (snapshot nil :read-only t)
   (head nil :read-only t)
   (dirty-p nil :read-only t)
