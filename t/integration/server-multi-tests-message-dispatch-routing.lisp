@@ -582,6 +582,46 @@
             (expect (null (gethash conn nerimux::*client-meta-tree-filter-snapshots*)))
             (expect (equal (list (list conn 1)) (reverse section-moves)))
             (expect (equal (list (list conn 1)) (reverse normal-moves)))))))))
+(describe "F3 command-input regressions"
+  (it "L4-23 rejects control input without submitting the previous clone command"
+    (with-fake-session (s)
+      (let* ((conn (%make-test-conn))
+             (nerimux::*clients* (list conn))
+             (nerimux::*main-thread-callbacks* nil)
+             (nerimux::*workspace-operation-jobs* (make-hash-table :test (function equal)))
+             (nerimux/vcs::*workspace-organizations* nil)
+             (clone-calls nil))
+        (with-stubbed-fdefinition
+            ((nerimux/vcs:vcs-package-available-p (lambda () t))
+             (nerimux/vcs:clone-bare-repository-async
+              (lambda (source &key on-start on-complete on-error callback-dispatch)
+                (declare (ignore on-complete on-error))
+                (push source clone-calls)
+                (funcall callback-dispatch
+                         (lambda ()
+                           (funcall on-start "example.invalid/team/repository"))))))
+          (labels ((send (bytes)
+                     (nerimux::%handle-multi-client-message
+                      nerimux::+msg-key+ bytes s conn))
+                   (send-text (text)
+                     (loop for byte across
+                           (cl-codec-kit:string-to-octets text :encoding :utf-8)
+                           do (send (vector byte)))) )
+            (setf (nerimux::client-conn-view conn) :repolist)
+            (send #(58))
+            (send-text "clone https://example.invalid/team/repository")
+            (expect (eq :command (nerimux::client-conn-modal conn)))
+            (expect (string= "clone https://example.invalid/team/repository"
+                             (nerimux::client-conn-command-buffer conn)))
+            (send #(1))
+            (expect (string= "" (nerimux::client-conn-command-buffer conn)))
+            (expect (search "control"
+                            (first (nerimux::client-conn-message-log conn))))
+            (send #(13))
+            (nerimux::%drain-main-thread-callbacks)
+            (expect (null clone-calls))
+            (expect (null (nerimux/vcs:workspace-organizations)))
+            (expect (= 0 (hash-table-count nerimux::*workspace-operation-jobs*)))))))))
 
 (describe "fr-107-server-input-suite"
 
