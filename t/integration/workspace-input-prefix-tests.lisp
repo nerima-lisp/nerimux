@@ -1168,6 +1168,9 @@
                (dispatches nil)
                (original-dispatch
                  (fdefinition (quote nerimux::%workspace-prefix-dispatch))))
+          (expect client-socket :to-be-truthy)
+          (expect server-socket :to-be-truthy)
+          (expect conn-a :to-be-truthy)
           (setf nerimux::*clients* (remove nil (list conn-a conn-b)))
           (unwind-protect
                (when (and client-socket conn-a)
