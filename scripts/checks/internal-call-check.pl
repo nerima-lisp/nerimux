@@ -58,6 +58,77 @@ sub code_of {
     return @lines;
 }
 
+sub skip_whitespace {
+    my ($text, $offset) = @_;
+    my $length = length($text);
+    $offset++ while $offset < $length && substr($text, $offset, 1) =~ /\s/;
+    return $offset;
+}
+
+sub skip_form {
+    my ($text, $offset) = @_;
+    my $length = length($text);
+    return $length if $offset >= $length;
+
+    if (substr($text, $offset, 1) eq '(') {
+        my $depth = 0;
+        for (my $i = $offset; $i < $length; $i++) {
+            my $char = substr($text, $i, 1);
+            $depth++ if $char eq '(';
+            if ($char eq ')') {
+                $depth--;
+                return $i + 1 if $depth == 0;
+            }
+        }
+        return $length;
+    }
+
+    while ($offset < $length) {
+        my $char = substr($text, $offset, 1);
+        last if $char =~ /\s/ || $char eq '(' || $char eq ')';
+        $offset++;
+    }
+    return $offset;
+}
+
+sub defstruct_slot_heads {
+    my ($text) = @_;
+    my %slot_heads;
+
+    # Slot descriptions look like calls, but only the slot head is a declaration;
+    # nested initializer forms must still go through the normal call check.
+    while ($text =~ /\(\s*defstruct\b/ig) {
+        my $form_start = $-[0];
+        my $form_end = skip_form($text, $form_start);
+        my $cursor = skip_whitespace($text, pos($text));
+        $cursor = skip_form($text, $cursor); # structure name and options
+
+        while ($cursor < $form_end - 1) {
+            $cursor = skip_whitespace($text, $cursor);
+            last if substr($text, $cursor, 1) eq ')';
+
+            my $slot_start = $cursor;
+            if (substr($text, $slot_start, 1) eq '(') {
+                my $head_start = skip_whitespace($text, $slot_start + 1);
+                my $head_end = $head_start;
+                while ($head_end < $form_end) {
+                    my $char = substr($text, $head_end, 1);
+                    last if $char =~ /\s/ || $char eq '(' || $char eq ')';
+                    $head_end++;
+                }
+                my $head = substr($text, $head_start, $head_end - $head_start);
+                $slot_heads{$slot_start} = 1 if $head =~ /^%/;
+            }
+
+            my $next = skip_form($text, $cursor);
+            last if $next <= $cursor;
+            $cursor = $next;
+        }
+    }
+
+    return %slot_heads;
+}
+
 my %code;              # path => [lines of code]
 $code{$_} = [ code_of($_) ] for @files;
 
@@ -175,6 +246,7 @@ my (@undefined, @arity);
 for my $f (@files) {
     my @lines = @{$code{$f}};
     my $text  = join("\n", @lines);
+    my %defstruct_slot_heads = defstruct_slot_heads($text);
     my @line_at;
     { my $off = 0; my $ln = 1;
       for my $l (@lines) { $line_at[$off + $_] = $ln for (0 .. length($l)); $off += length($l) + 1; $ln++ } }
@@ -186,6 +258,7 @@ for my $f (@files) {
 
         # Skip the definition site itself.
         my $before = substr($text, ($start >= 40 ? $start - 40 : 0), ($start >= 40 ? 40 : $start));
+        next if $defstruct_slot_heads{$start};
         next if $before =~ /\((?:defun|defmacro|flet|labels|macrolet|function|quote)\s+$/i;
         next if $before =~ /#'\s*$/;
         # A binding position, not a call: (let ((%x ...))) and friends put the
