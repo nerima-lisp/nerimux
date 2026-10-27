@@ -312,16 +312,31 @@
 (defun %client-session-output (queue &optional (output-fd 1))
   (%client-drop-pending-rendered-output queue)
   (loop while (%client-output-queue-head queue) do
-    (select-fds nil +poll-timeout-us+ :write-fds (list output-fd))
-    (%client-write-output-ready queue output-fd))
-  (%client-enqueue-output
-   queue
-   (cl-codec-kit:string-to-octets
-    (format nil "~C[?1004l~C[?2004l~C[?1049l~%" #\Escape #\Escape #\Escape)
-    :encoding :utf-8))
-  (loop while (%client-output-queue-head queue) do
-    (select-fds nil +poll-timeout-us+ :write-fds (list output-fd))
-    (%client-write-output-ready queue output-fd)))
+    (multiple-value-bind (read-ready write-ready)
+        (select-fds nil +poll-timeout-us+ :write-fds (list output-fd))
+      (declare (ignore read-ready))
+      (unless (member output-fd write-ready)
+        (return))
+      (let ((bytes-before (%client-output-queue-bytes queue)))
+        (%client-write-output-ready queue output-fd)
+        (when (= bytes-before (%client-output-queue-bytes queue))
+          (return)))))
+  (when (null (%client-output-queue-head queue))
+    (%client-enqueue-output
+     queue
+     (cl-codec-kit:string-to-octets
+      (format nil "~C[?1004l~C[?2004l~C[?1049l~%" #\Escape #\Escape #\Escape)
+      :encoding :utf-8))
+    (loop while (%client-output-queue-head queue) do
+      (multiple-value-bind (read-ready write-ready)
+          (select-fds nil +poll-timeout-us+ :write-fds (list output-fd))
+        (declare (ignore read-ready))
+        (unless (member output-fd write-ready)
+          (return))
+        (let ((bytes-before (%client-output-queue-bytes queue)))
+          (%client-write-output-ready queue output-fd)
+          (when (= bytes-before (%client-output-queue-bytes queue))
+            (return)))))))
 (defun %run-attach-session (socket server-socket-fd target output-queue &optional (input-fd 0) (output-fd 1))
   "Run the client relay with one incremental reader and writer on SOCKET."
   (let ((reader (make-frame-reader))
