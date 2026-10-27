@@ -127,6 +127,8 @@
   stream
   fd
   (frame-reader (nerimux/transport:make-frame-reader))
+  (read-progress-deadline nil)
+  (write-progress-deadline nil)
   (frame-writer (nerimux/transport:make-frame-writer))
   (control-frame-head nil)
   (control-frame-tail nil)
@@ -226,8 +228,8 @@
   (make-hash-table :test #'equal))
 
 (defconstant +max-client-control-frame-bytes+ (+ (* 64 1024 1024) 5))
-
 (defconstant +max-client-output-buffer-bytes+ (+ (* 128 1024 1024) 10))
+(defconstant +client-io-progress-timeout-seconds+ 30)
 
 (defun %client-output-buffered-bytes (conn)
   (+ (client-conn-control-frame-bytes conn)
@@ -283,6 +285,8 @@
 (defun %clear-client-output (conn)
   (setf (client-conn-frame-reader conn)
         (nerimux/transport:make-frame-reader)
+        (client-conn-read-progress-deadline conn) nil
+        (client-conn-write-progress-deadline conn) nil
         (client-conn-frame-writer conn)
         (nerimux/transport:make-frame-writer)
         (client-conn-control-frame-head conn) nil

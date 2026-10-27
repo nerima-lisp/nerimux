@@ -596,13 +596,18 @@
 
   (defun %next-client-render-timeout-us (now)
     (let ((nearest nil))
-      (dolist (conn *clients*)
-        (when (and (not (client-conn-close-after-write-p conn))
-                   (or *dirty*
-                       (client-conn-render-dirty-p conn)
-                       (%client-message-expired-p conn)))
-          (let ((deadline (or (%client-render-deadline conn) now)))
-            (setf nearest (if nearest (min nearest deadline) deadline)))))
+      (flet ((include-deadline (deadline)
+               (when deadline
+                 (setf nearest (if nearest (min nearest deadline) deadline)))))
+        (dolist (conn *clients*)
+          (unless (client-conn-close-after-write-p conn)
+            (include-deadline (client-conn-read-progress-deadline conn)))
+          (include-deadline (client-conn-write-progress-deadline conn))
+          (when (and (not (client-conn-close-after-write-p conn))
+                     (or *dirty*
+                         (client-conn-render-dirty-p conn)
+                         (%client-message-expired-p conn)))
+            (include-deadline (or (%client-render-deadline conn) now)))))
       (if nearest
           (min +poll-timeout-us+
                (max 0
@@ -761,27 +766,39 @@
       (%drop-client conn))
     :complete))
 
-(defun %advance-client-output (conn &key (max-bytes 65536))
+(defun %advance-client-output
+    (conn &key (max-bytes 65536) (now (get-internal-real-time)))
   (with-loop-safe-error (nil :on-error (%drop-client conn))
     (unless (nerimux/transport:frame-writer-pending-p
              (client-conn-frame-writer conn))
       (%start-client-output-frame conn))
-    (multiple-value-prog1
+    (multiple-value-bind (status bytes-written)
         (if (nerimux/transport:frame-writer-pending-p
              (client-conn-frame-writer conn))
-            (multiple-value-bind (status bytes-written)
+            (multiple-value-bind (write-status written)
                 (nerimux/transport:write-frame-ready
                  (client-conn-frame-writer conn)
                  (client-conn-socket conn)
                  :max-bytes max-bytes)
-              (when (eq status :complete)
+              (when (eq write-status :complete)
                 (%complete-client-output-frame conn))
-              (values status bytes-written))
+              (values write-status written))
             (values :idle 0))
+      (cond
+        ((and (eq status :pending)
+              (integerp bytes-written)
+              (plusp bytes-written))
+         (setf (client-conn-write-progress-deadline conn)
+               (+ now
+                  (* +client-io-progress-timeout-seconds+
+                     internal-time-units-per-second))))
+        ((member status '(:complete :idle))
+         (setf (client-conn-write-progress-deadline conn) nil)))
       (when (and (member conn *clients*)
                  (client-conn-close-after-write-p conn)
                  (not (%client-output-pending-p conn)))
-        (%drop-client conn)))))
+        (%drop-client conn))
+      (values status bytes-written))))
 
 (defun %flush-client-output (&key drain)
   (dolist (conn (copy-list *clients*))

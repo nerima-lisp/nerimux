@@ -337,42 +337,52 @@
       (expect (= 2 read-calls))
       (expect latest-frame)
       (expect (equalp latest-frame sent))
-      (expect (not (equalp old-frame sent)))))) (it "multi-serve-iteration-selects-only-pending-write-fds"
-  (let* ((conn-a (%make-test-conn))
-         (conn-b (%make-test-conn))
-         (selected-read-fds nil)
-         (selected-write-fds nil)
-         (selected-timeout nil)
-         (nerimux::*clients* (list conn-a conn-b))
-         (nerimux::*dirty* nil)
-         (nerimux::*server-termination-requested-p* nil)
-         (nerimux::*client-read-round-robin-cursor* nil)
-         (nerimux::*client-write-round-robin-cursor* nil))
-    (setf (nerimux::client-conn-fd conn-a) 8
-          (nerimux::client-conn-fd conn-b) 9)
-    (nerimux::%queue-client-control-frame
-     conn-a (nerimux/protocol:msg-reply "pending"))
-    (with-stubbed-fdefinition
-        ((nerimux::%drain-main-thread-callbacks (lambda () nil))
-         (nerimux::%workspace-job-tick (lambda () nil))
-         (nerimux::%persist-runtime-state
-          (lambda (session) (declare (ignore session))))
-         (nerimux::%queue-session-control-output
-          (lambda (session) (declare (ignore session))))
-         (nerimux::%schedule-client-render-frames
-          (lambda (session &optional now) (declare (ignore session now))))
-         (nerimux/net::socket-fd
-          (lambda (listener) (declare (ignore listener)) 7))
-         (nerimux/pty::select-fds
-          (lambda (read-fds timeout-us &key write-fds)
-            (setf selected-read-fds read-fds
-                  selected-write-fds write-fds
-                  selected-timeout timeout-us)
-            (values nil nil))))
-      (expect (null (nerimux::%multi-serve-iteration :listener :session))))
-    (expect (equal (list 7 8 9) selected-read-fds))
-    (expect (equal (list 8) selected-write-fds))
-    (expect (<= 0 selected-timeout 50000)))) (it "run-multi-server-loop-stops-on-quit-and-drops-all-clients"
+      (expect (not (equalp old-frame sent)))))) (it "multi-serve-iteration-selects-pending-write-fds-and-nearest-io-deadline"
+    (let* ((conn-a (%make-test-conn))
+           (conn-b (%make-test-conn))
+           (selected-read-fds nil)
+           (selected-write-fds nil)
+           (selected-timeout nil)
+           (now (get-internal-real-time))
+           (near-ticks
+             (max 1
+                  (floor (* internal-time-units-per-second 20000) 1000000)))
+           (nerimux::*clients* (list conn-a conn-b))
+           (nerimux::*dirty* nil)
+           (nerimux::*server-termination-requested-p* nil)
+           (nerimux::*client-read-round-robin-cursor* nil)
+           (nerimux::*client-write-round-robin-cursor* nil))
+      (setf (nerimux::client-conn-fd conn-a) 8
+            (nerimux::client-conn-fd conn-b) 9
+            (nerimux::client-conn-read-progress-deadline conn-b)
+            (+ now near-ticks)
+            (nerimux::client-conn-render-dirty-p conn-a) nil
+            (nerimux::client-conn-render-dirty-p conn-b) nil)
+      (expect (not (nerimux::%client-message-expired-p conn-a)))
+      (expect (not (nerimux::%client-message-expired-p conn-b)))
+      (nerimux::%queue-client-control-frame
+       conn-a (nerimux/protocol:msg-reply "pending"))
+      (with-stubbed-fdefinition
+          ((nerimux::%drain-main-thread-callbacks (lambda () nil))
+           (nerimux::%workspace-job-tick (lambda () nil))
+           (nerimux::%persist-runtime-state
+            (lambda (session) (declare (ignore session))))
+           (nerimux::%queue-session-control-output
+            (lambda (session) (declare (ignore session))))
+           (nerimux::%schedule-client-render-frames
+            (lambda (session &optional now) (declare (ignore session now))))
+           (nerimux/net::socket-fd
+            (lambda (listener) (declare (ignore listener)) 7))
+           (nerimux/pty::select-fds
+            (lambda (read-fds timeout-us &key write-fds)
+              (setf selected-read-fds read-fds
+                    selected-write-fds write-fds
+                    selected-timeout timeout-us)
+              (values nil nil))))
+        (expect (null (nerimux::%multi-serve-iteration :listener :session))))
+      (expect (equal (list 7 8 9) selected-read-fds))
+      (expect (equal (list 8) selected-write-fds))
+      (expect (< selected-timeout 25000)))) (it "run-multi-server-loop-stops-on-quit-and-drops-all-clients"
     (let ((events nil)
           (first-call t)
           (conn-a (%make-test-conn))
@@ -759,6 +769,154 @@
       (expect (null (nerimux::client-conn-active-output-frame conn)))
       (expect (not (nerimux/transport:frame-writer-pending-p
                     (nerimux::client-conn-frame-writer conn))))))
+  (it "partial-read-shortens-select-timeout-before-deadline"
+    (let* ((conn (%make-test-conn))
+           (started-at (get-internal-real-time))
+           (near-deadline-now
+             (+ started-at
+                (- (* 30 internal-time-units-per-second)
+                   (max 1
+                        (floor (* internal-time-units-per-second 20)
+                               1000)))))
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (setf (nerimux::client-conn-render-dirty-p conn) nil)
+      (with-stubbed-fdefinition
+          ((nerimux/transport:read-frame-ready
+            (lambda (reader socket &key max-bytes)
+              (declare (ignore socket max-bytes))
+              (setf (nerimux/transport::frame-reader-offset reader) 3)
+              (values nil nil :pending))))
+        (multiple-value-bind (disposition status bytes-read)
+            (nerimux::%read-and-dispatch-client-message :session conn)
+          (expect (null disposition))
+          (expect (eq :pending status))
+          (expect (= 3 bytes-read)))
+        (expect (< (nerimux::%next-client-render-timeout-us
+                    near-deadline-now)
+                   30000)))))
+  (it "partial-write-shortens-select-timeout-before-deadline"
+    (let* ((conn (%make-test-conn))
+           (started-at (get-internal-real-time))
+           (near-deadline-now
+             (+ started-at
+                (- (* 30 internal-time-units-per-second)
+                   (max 1
+                        (floor (* internal-time-units-per-second 20)
+                               1000)))))
+           (frame (nerimux/protocol:msg-reply "partial writer"))
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (setf (nerimux::client-conn-render-dirty-p conn) nil)
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame conn frame)))
+      (with-stubbed-fdefinition
+          ((sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket buffer dontwait nosignal))
+              length)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn :max-bytes 3)
+          (expect (eq :pending status))
+          (expect (= 3 bytes-written))))
+      (expect (< (nerimux::%next-client-render-timeout-us
+                  near-deadline-now)
+                 30000))))
+  (it "client-io-progress-deadlines-are-independent-and-expire-per-client"
+    (let* ((conn (%make-test-conn))
+           (frame (nerimux/protocol:msg-reply "deadline progress"))
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil))
+      (setf (nerimux::client-conn-render-dirty-p conn) nil)
+      (with-stubbed-fdefinition
+          ((nerimux/transport:read-frame-ready
+            (lambda (reader socket &key max-bytes)
+              (declare (ignore socket max-bytes))
+              (incf (nerimux/transport::frame-reader-offset reader) 3)
+              (values nil nil :pending))))
+        (multiple-value-bind (disposition status bytes-read)
+            (nerimux::%read-and-dispatch-client-message :session conn)
+          (expect (null disposition))
+          (expect (eq :pending status))
+          (expect (= 3 bytes-read)))
+        (let ((first-read-deadline
+                (nerimux::client-conn-read-progress-deadline conn)))
+          (expect first-read-deadline)
+          (expect (eq :queued
+                      (nerimux::%queue-client-control-frame conn frame)))
+          (with-stubbed-fdefinition
+              ((sb-bsd-sockets:socket-send
+                (lambda (socket buffer length &key dontwait nosignal)
+                  (declare (ignore socket buffer dontwait nosignal))
+                  length)))
+            (multiple-value-bind (status bytes-written)
+                (nerimux::%advance-client-output conn :max-bytes 2)
+              (expect (eq :pending status))
+              (expect (= 2 bytes-written)))
+            (let ((first-write-deadline
+                    (nerimux::client-conn-write-progress-deadline conn)))
+              (expect first-write-deadline)
+              (expect (eql first-read-deadline
+                           (nerimux::client-conn-read-progress-deadline conn)))
+              (sleep 0.002)
+              (multiple-value-bind (disposition status bytes-read)
+                  (nerimux::%read-and-dispatch-client-message :session conn)
+                (expect (null disposition))
+                (expect (eq :pending status))
+                (expect (= 3 bytes-read)))
+              (let ((second-read-deadline
+                      (nerimux::client-conn-read-progress-deadline conn)))
+                (expect (and second-read-deadline
+                             (> second-read-deadline first-read-deadline)))
+                (expect (eql first-write-deadline
+                             (nerimux::client-conn-write-progress-deadline conn)))
+                (sleep 0.002)
+                (multiple-value-bind (status bytes-written)
+                    (nerimux::%advance-client-output conn :max-bytes 2)
+                  (expect (eq :pending status))
+                  (expect (= 2 bytes-written)))
+                (let ((second-write-deadline
+                        (nerimux::client-conn-write-progress-deadline conn)))
+                  (expect (and second-write-deadline
+                               (> second-write-deadline first-write-deadline)))
+                  (expect (eql second-read-deadline
+                               (nerimux::client-conn-read-progress-deadline conn)))
+                  (let* ((now (get-internal-real-time))
+                         (near-ticks
+                           (max 1
+                                (floor (* internal-time-units-per-second 20000)
+                                       1000000))))
+                    (setf (nerimux::client-conn-read-progress-deadline conn)
+                          (+ now near-ticks)
+                          (nerimux::client-conn-write-progress-deadline conn)
+                          (+ now (* 3 near-ticks)))
+                    (expect (< (nerimux::%next-client-render-timeout-us now)
+                               25000)))))))))
+    (let* ((expired-read (%make-test-conn))
+           (expired-write (%make-test-conn))
+           (active (%make-test-conn))
+           (healthy (%make-test-conn))
+           (now (get-internal-real-time))
+           (nerimux::*clients* (list expired-read expired-write active healthy)))
+      (setf (nerimux::client-conn-read-progress-deadline expired-read) (1- now)
+            (nerimux::client-conn-write-progress-deadline expired-read)
+            (+ now internal-time-units-per-second)
+            (nerimux::client-conn-read-progress-deadline expired-write)
+            (+ now internal-time-units-per-second)
+            (nerimux::client-conn-write-progress-deadline expired-write) (1- now)
+            (nerimux::client-conn-read-progress-deadline active)
+            (+ now internal-time-units-per-second))
+      (expect (fboundp 'nerimux::%drop-expired-client-io))
+      (when (fboundp 'nerimux::%drop-expired-client-io)
+        (nerimux::%drop-expired-client-io now)
+        (expect (not (member expired-read nerimux::*clients* :test #'eq)))
+        (expect (not (member expired-write nerimux::*clients* :test #'eq)))
+        (expect (member active nerimux::*clients* :test #'eq))
+        (expect (member healthy nerimux::*clients* :test #'eq))
+        (expect (null
+                 (nerimux::client-conn-read-progress-deadline expired-read)))
+        (expect (null
+                 (nerimux::client-conn-write-progress-deadline expired-write)))))))
   (it "client-output-fatal-partial-write-drops-and-clears-client-state"
   (let* ((conn (%make-test-conn))
          (first-frame (nerimux/protocol:msg-reply "first"))

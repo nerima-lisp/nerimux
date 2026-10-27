@@ -15,7 +15,9 @@
       (when sock
         (%add-client sock)))))
 
-(defun %read-and-dispatch-client-message (session conn &key (max-bytes 65536))
+(defun %read-and-dispatch-client-message
+    (session conn &key (max-bytes 65536)
+                        (now (get-internal-real-time)))
   "Read one incremental frame and return disposition, status, and bytes consumed."
   (with-loop-safe-error (nil :on-error (values :drop :error 0))
     (let* ((reader (client-conn-frame-reader conn))
@@ -33,13 +35,23 @@
                   (otherwise 0))))
           (case status
             (:frame
+             (setf (client-conn-read-progress-deadline conn) nil)
              (values (%handle-multi-client-message type payload session conn)
                      :frame
                      bytes-read))
-            (:eof (values :eof :eof 0))
-            (:pending (values nil :pending bytes-read))
+            (:eof
+             (setf (client-conn-read-progress-deadline conn) nil)
+             (values :eof :eof 0))
+            (:pending
+             (when (plusp bytes-read)
+               (setf (client-conn-read-progress-deadline conn)
+                     (+ now
+                        (* +client-io-progress-timeout-seconds+
+                           internal-time-units-per-second))))
+             (values nil :pending bytes-read))
             (:would-block (values nil :would-block 0))
             (otherwise
+             (setf (client-conn-read-progress-deadline conn) nil)
              (error "Unexpected frame reader status ~S" status))))))))
 
 (defun %apply-client-disposition (disposition conn)
@@ -103,30 +115,41 @@
   (when *server-termination-requested-p*
     (setf *running* nil)
     (return-from %multi-serve-iteration :quit))
-  (let* ((listener-fd (socket-fd listener))
-         (previously-pending
-           (remove-if-not #'%client-output-pending-p (copy-list *clients*)))
-         (read-fds (cons listener-fd (%client-fds)))
-         (write-fds (%client-write-fds))
-         (timeout-us (%next-client-render-timeout-us
-                      (get-internal-real-time))))
-    (multiple-value-bind (read-ready write-ready)
-        (select-fds read-fds timeout-us :write-fds write-fds)
-      (%accept-pending-connection listener listener-fd read-ready)
-      (let ((disposition (%dispatch-ready-clients session read-ready)))
-        (%queue-session-control-output session)
-        (%refresh-pending-client-render-frames session)
-        (%flush-ready-client-output write-ready previously-pending)
-        (when (eq :quit disposition)
-          (return-from %multi-serve-iteration :quit))
-        (%drain-main-thread-callbacks)
-        (when *server-termination-requested-p*
-          (setf *running* nil)
-          (return-from %multi-serve-iteration :quit))
-        (%workspace-job-tick)
-        (%persist-runtime-state session)
-        (%schedule-client-render-frames session)
-        nil))))
+  (let ((now (get-internal-real-time)))
+    (%drop-expired-client-io now)
+    (let* ((listener-fd (socket-fd listener))
+           (previously-pending
+             (remove-if-not #'%client-output-pending-p (copy-list *clients*)))
+           (read-fds (cons listener-fd (%client-fds)))
+           (write-fds (%client-write-fds))
+           (timeout-us (%next-client-render-timeout-us now)))
+      (multiple-value-bind (read-ready write-ready)
+          (select-fds read-fds timeout-us :write-fds write-fds)
+        (%drop-expired-client-io (get-internal-real-time))
+        (%accept-pending-connection listener listener-fd read-ready)
+        (let ((disposition (%dispatch-ready-clients session read-ready)))
+          (%queue-session-control-output session)
+          (%refresh-pending-client-render-frames session)
+          (%flush-ready-client-output write-ready previously-pending)
+          (when (eq :quit disposition)
+            (return-from %multi-serve-iteration :quit))
+          (%drain-main-thread-callbacks)
+          (when *server-termination-requested-p*
+            (setf *running* nil)
+            (return-from %multi-serve-iteration :quit))
+          (%workspace-job-tick)
+          (%persist-runtime-state session)
+          (%schedule-client-render-frames session)
+          nil)))))
+(defun %drop-expired-client-io (now)
+  (dolist (conn (copy-list *clients*))
+    (when (or (and (not (client-conn-close-after-write-p conn))
+                   (client-conn-read-progress-deadline conn)
+                   (<= (client-conn-read-progress-deadline conn) now))
+              (and (client-conn-write-progress-deadline conn)
+                   (<= (client-conn-write-progress-deadline conn) now)))
+      (%drop-client conn)))
+  nil)
 
 (defun %run-multi-server-loop (listener session)
   "Drive %MULTI-SERVE-ITERATION until *RUNNING* clears or a command ends the
