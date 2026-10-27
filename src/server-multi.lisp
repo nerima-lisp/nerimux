@@ -423,6 +423,7 @@ MODE is :MARK or :SETTLE; STALE-P applies when settling."
   (when (member conn *clients*)
     (if (or bye after-flush)
         (progn
+          (setf (client-conn-pending-render-state conn) nil)
           (when (and bye (not (client-conn-close-after-write-p conn)))
             (unless (eq :queued
                         (%queue-client-control-frame conn (msg-bye)))

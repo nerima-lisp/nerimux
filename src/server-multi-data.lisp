@@ -238,8 +238,6 @@
        (if pending (length (first pending)) 0))))
 
 (defun %client-output-pending-p (conn)
-  (when (client-conn-close-after-write-p conn)
-    (setf (client-conn-pending-render-state conn) nil))
   (or (nerimux/transport:frame-writer-pending-p
        (client-conn-frame-writer conn))
       (client-conn-control-frame-head conn)
