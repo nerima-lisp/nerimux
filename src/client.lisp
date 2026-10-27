@@ -11,7 +11,6 @@
     (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
     (send-frame stream (msg-resize *term-rows* *term-cols*))
     t))
-
 (defun %forward-stdin-byte (stream)
   "Read the available stdin burst once and forward it as one +msg-key+ frame."
   (let ((stdin-octets (read-available-octets 0 +pty-buf-size+)))
@@ -128,97 +127,330 @@
    notice is painted over rather than left behind."
   (format t "nerimux: connecting...")
   (force-output))
+(defconstant +client-output-limit+ (+ (* 64 1024 1024) 32))
+(defparameter +client-sync-begin+
+    (cl-codec-kit:string-to-octets (format nil "~C[?2026h" #\Escape)
+                                    :encoding :utf-8))
+(defparameter +client-sync-end+
+    (cl-codec-kit:string-to-octets (format nil "~C[?2026l" #\Escape)
+                                    :encoding :utf-8))
+(defstruct (%client-output-item (:constructor %make-client-output-item (bytes kind)))
+    bytes kind (offset 0))
+(defstruct (%client-output-queue (:constructor %make-client-output-queue ()))
+  head tail (bytes 0) (reserved 0) (limit +client-output-limit+))
 
-(defun %run-attach-session (stream server-socket-fd target)
-  "Send the initial handshake (msg-attach, then the attach-target command) on
-   STREAM, then run the blocking stdin<->server relay loop until the server
-   signals end-of-session or a PEER-IO-FAILURE (server.lisp) is caught.
-   Returns the parting line the server sent on the way out (detach or quit),
-   or NIL; RUN-CLIENT prints it once the terminal is restored.
+(defun %client-enqueue-output (queue bytes &optional (kind :raw))
+  (let ((size (length bytes)))
+    (when (zerop size)
+      (return-from %client-enqueue-output t))
+    (when (> (+ (%client-output-queue-bytes queue)
+                (%client-output-queue-reserved queue)
+                size)
+             (%client-output-queue-limit queue))
+      (return-from %client-enqueue-output nil))
+    (let ((cell (list (%make-client-output-item bytes kind))))
+      (if (%client-output-queue-tail queue)
+          (setf (cdr (%client-output-queue-tail queue)) cell)
+          (setf (%client-output-queue-head queue) cell))
+      (setf (%client-output-queue-tail queue) cell)
+      (incf (%client-output-queue-bytes queue) size)
+      t)))
 
-   Extracted from RUN-CLIENT so this pure networking session (no terminal
-   calls -- no WITH-RAW-MODE, TERMINAL-SIZE, or INSTALL-SIGWINCH-HANDLER) is
-   independently testable with a socket pair, the same way
-   %MAYBE-SEND-RESIZE / %FORWARD-STDIN-BYTE / %RECEIVE-IF-READY already are
-   (see the file header's Event-loop decomposition note).
+(defun %client-reserve-output (queue size)
+  (when (<= (+ (%client-output-queue-bytes queue)
+               (%client-output-queue-reserved queue)
+               size)
+            (%client-output-queue-limit queue))
+    (incf (%client-output-queue-reserved queue) size)
+    t))
 
-   PEER-IO-FAILURE is SB-EXT:TIMEOUT from a wedged peer, or any ERROR from
-   the socket -- SEND-FRAME (infrastructure/net/transport.lisp) documents
-   itself as signalling exactly the former when the peer is too slow to
-   accept a write, and every send below reaches it.  The handshake sends and
-   every send inside the loop are one continuous single-connection session:
-   a failure at any point in it means the same thing, the connection is
-   dead, so one HANDLER-CASE wraps the whole session rather than a separate
-   one per SEND-FRAME call site.
+(defun %client-enqueue-reserved-output (queue bytes kind reservation)
+  (decf (%client-output-queue-reserved queue) reservation)
+  (let ((size (length bytes)))
+    (when (plusp size)
+      (let ((cell (list (%make-client-output-item bytes kind))))
+        (if (%client-output-queue-tail queue)
+            (setf (cdr (%client-output-queue-tail queue)) cell)
+            (setf (%client-output-queue-head queue) cell))
+        (setf (%client-output-queue-tail queue) cell)
+        (incf (%client-output-queue-bytes queue) size)))
+    t))
+(defun %client-pop-output (queue)
+    (let ((cell (%client-output-queue-head queue)))
+      (when cell
+        (setf (%client-output-queue-head queue) (cdr cell))
+        (unless (%client-output-queue-head queue)
+          (setf (%client-output-queue-tail queue) nil))
+        (car cell))))
+(defun %client-fd-flags (fd)
+    (sb-posix:fcntl fd sb-posix:f-getfl))
+(defun %client-set-nonblocking (fd)
+    (let ((flags (%client-fd-flags fd)))
+      (sb-posix:fcntl fd sb-posix:f-setfl (logior flags sb-posix:o-nonblock))
+      flags))
+(defun %client-restore-fd-flags (fd flags)
+    (sb-posix:fcntl fd sb-posix:f-setfl flags))
+(defun %client-would-block-p (condition)
+    (let ((errno (sb-posix:syscall-errno condition)))
+      (or (= errno sb-posix:eagain)
+          (= errno sb-posix:ewouldblock))))
+(defun %client-read-fd (fd buffer)
+    (loop
+      (handler-case
+          (return-from %client-read-fd
+            (sb-sys:with-pinned-objects (buffer)
+              (let ((count (sb-posix:read fd (sb-sys:vector-sap buffer)
+                                          (length buffer))))
+                (values count (if (zerop count) :eof :data)))))
+        (sb-posix:syscall-error (condition)
+          (let ((errno (sb-posix:syscall-errno condition)))
+            (cond
+              ((= errno sb-posix:eintr))
+              ((%client-would-block-p condition)
+               (return-from %client-read-fd (values nil :would-block)))
+              (t (error condition))))))))
+(defun %client-write-fd (fd buffer start length)
+    (loop
+      (handler-case
+          (return-from %client-write-fd
+            (sb-sys:with-pinned-objects (buffer)
+              (sb-posix:write fd
+                              (sb-sys:sap+ (sb-sys:vector-sap buffer) start)
+                              length)))
+        (sb-posix:syscall-error (condition)
+          (let ((errno (sb-posix:syscall-errno condition)))
+            (cond
+              ((= errno sb-posix:eintr))
+              ((%client-would-block-p condition)
+               (return-from %client-write-fd nil))
+              (t (error condition))))))))
+(defun %client-write-output-ready (queue &optional (output-fd 1))
+    (let* ((cell (%client-output-queue-head queue))
+           (item (and cell (car cell)))
+           (bytes (and item (%client-output-item-bytes item)))
+           (offset (and item (%client-output-item-offset item)))
+           (remaining (and item (- (length bytes) offset))))
+      (when (and remaining (plusp remaining))
+        (let ((count (%client-write-fd output-fd bytes offset remaining)))
+          (when count
+            (incf (%client-output-item-offset item) count)
+            (decf (%client-output-queue-bytes queue) count)
+            (when (= (%client-output-item-offset item) (length bytes))
+              (%client-pop-output queue)))))))
+(defun %client-output-server-frame (queue type payload reservation)
+  (case type
+    (#.+msg-frame+
+     (let* ((size (+ (length +client-sync-begin+)
+                     (length payload)
+                     (length +client-sync-end+)))
+            (bytes (make-array size :element-type '(unsigned-byte 8))))
+       (replace bytes +client-sync-begin+)
+       (replace bytes payload :start1 (length +client-sync-begin+))
+       (replace bytes +client-sync-end+
+                :start1 (+ (length +client-sync-begin+) (length payload)))
+       (%client-enqueue-reserved-output queue bytes :frame reservation)
+       (values nil nil)))
+    (#.+msg-notification+
+     (%client-enqueue-reserved-output queue payload :raw reservation)
+     (values nil nil))
+    (#.+msg-reply+
+     (decf (%client-output-queue-reserved queue) reservation)
+     (values nil (decode-text payload)))
+    (#.+msg-bye+
+     (decf (%client-output-queue-reserved queue) reservation)
+     (values :exit nil))
+    (t
+     (decf (%client-output-queue-reserved queue) reservation)
+     (values nil nil))))
+(defun %client-drop-pending-rendered-output (queue)
+  (let ((new-head nil)
+        (new-tail nil)
+        (remaining-bytes 0))
+    (loop for cell on (%client-output-queue-head queue)
+          for item = (car cell)
+          for bytes = (%client-output-item-bytes item)
+          for offset = (%client-output-item-offset item)
+          for kind = (%client-output-item-kind item)
+          for remaining = (- (length bytes) offset)
+          for replacement =
+            (when (eq kind :frame)
+              (cond
+                ((zerop offset) nil)
+                ((< offset (length +client-sync-begin+))
+                 (concatenate '(simple-array (unsigned-byte 8) (*))
+                              (subseq bytes offset
+                                      (length +client-sync-begin+))
+                              +client-sync-end+))
+                ((< offset (- (length bytes)
+                              (length +client-sync-end+)))
+                 +client-sync-end+)
+                (t (subseq bytes offset))))
+          do (cond
+               ((eq kind :frame)
+                (when replacement
+                  (let ((new-cell
+                          (list (%make-client-output-item replacement
+                                                          :sync-close))))
+                    (if new-tail
+                        (setf (cdr new-tail) new-cell)
+                        (setf new-head new-cell))
+                    (setf new-tail new-cell)
+                    (incf remaining-bytes (length replacement)))))
+               (t
+                (let ((new-cell (list item)))
+                  (if new-tail
+                      (setf (cdr new-tail) new-cell)
+                      (setf new-head new-cell))
+                  (setf new-tail new-cell)
+                  (incf remaining-bytes remaining)))))
+    (setf (%client-output-queue-head queue) new-head
+          (%client-output-queue-tail queue) new-tail
+          (%client-output-queue-bytes queue) remaining-bytes
+          (%client-output-queue-reserved queue) 0)
+    queue))
 
-   Unlike the server's WITH-LOOP-SAFE-ERROR (server-multi-dispatch.lisp),
-   whose return value is a per-message loop disposition fed back into a
-   dispatch table, this is a single blocking client loop with no caller
-   waiting on a disposition: the right response is to report the failure to
-   *ERROR-OUTPUT* and return, exactly as reaching :exit (+msg-bye+ / EOF)
-   already does, so RUN-CLIENT's WITH-RAW-MODE still restores the terminal
-   and its outer UNWIND-PROTECT still closes the socket."
-  (let ((parting nil))
-    (handler-case (progn
-                    (send-frame stream
-                                (msg-attach *term-rows*
-                                            *term-cols*
-                                            (%client-terminal-identity)))
-                    (%send-client-attach-target stream target)
-                    (loop (%maybe-send-resize stream) (let ((ready
-                                                             (select-fds
-                                                              (list 0
-                                                                    server-socket-fd)
-                                                              +poll-timeout-us+)))
-                                                        (when (member 0 ready)
-                                                          (%forward-stdin-byte
-                                                           stream))
-                                                        (multiple-value-bind
-                                                            (disposition text)
-                                                            (%receive-if-ready
-                                                             stream
-                                                             server-socket-fd
-                                                             ready)
-                                                          (when text
-                                                            (setf parting text))
-                                                          (when (eq :exit
-                                                                    disposition)
-                                                            (return))))))
-      (peer-io-failure (c)
-        (format *error-output* "~&nerimux: connection lost: ~A~%" c)))
-    parting))
-
+(defun %client-session-output (queue &optional (output-fd 1))
+  (%client-drop-pending-rendered-output queue)
+  (loop while (%client-output-queue-head queue) do
+    (select-fds nil +poll-timeout-us+ :write-fds (list output-fd))
+    (%client-write-output-ready queue output-fd))
+  (%client-enqueue-output
+   queue
+   (cl-codec-kit:string-to-octets
+    (format nil "~C[?1004l~C[?2004l~C[?1049l~%" #\Escape #\Escape #\Escape)
+    :encoding :utf-8))
+  (loop while (%client-output-queue-head queue) do
+    (select-fds nil +poll-timeout-us+ :write-fds (list output-fd))
+    (%client-write-output-ready queue output-fd)))
+(defun %run-attach-session (socket server-socket-fd target output-queue &optional (input-fd 0) (output-fd 1))
+  "Run the client relay with one incremental reader and writer on SOCKET."
+  (let ((reader (make-frame-reader))
+        (writer (make-frame-writer))
+        (outbound-front
+          (list (msg-attach *term-rows* *term-cols*
+                            (%client-terminal-identity))
+                (msg-command :attach-target nil
+                             (list (or target "")
+                                   (%client-working-directory)))))
+        (outbound-back nil)
+        (stdin-open-p t)
+        (reservation nil)
+        (pending-event nil)
+        (parting nil)
+        (done nil))
+    (handler-case
+        (loop until done do
+          (when *resize-pending*
+            (setf *resize-pending* nil)
+            (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
+            (push (msg-resize *term-rows* *term-cols*) outbound-back))
+          (when pending-event
+            (unless reservation
+              (let ((needed (+ (length (second pending-event)) (length +client-sync-begin+) (length +client-sync-end+))))
+                (when (%client-reserve-output output-queue needed)
+                  (setf reservation needed))))
+            (when reservation
+              (multiple-value-bind (disposition text)
+                  (%client-output-server-frame
+                   output-queue (first pending-event) (second pending-event)
+                   reservation)
+                (setf pending-event nil reservation nil)
+                (when text (setf parting text))
+                (when (eq disposition :exit) (return)))))
+          (let ((payload-size (frame-reader-payload-size reader)))
+            (when (and payload-size (null reservation))
+              (let ((needed (+ payload-size (length +client-sync-begin+) (length +client-sync-end+))))
+                (when (%client-reserve-output output-queue needed)
+                  (setf reservation needed)))))
+          (unless (frame-writer-pending-p writer)
+            (when (null outbound-front)
+              (setf outbound-front (nreverse outbound-back)
+                    outbound-back nil))
+            (when outbound-front
+              (start-frame-write writer (pop outbound-front))))
+          (let* ((read-fds
+                   (append (when stdin-open-p (list input-fd))
+                           (when (and (null pending-event)
+                                      (or reservation
+                                          (null (frame-reader-payload-size reader))))
+                             (list server-socket-fd))))
+                 (write-fds
+                   (append (when (frame-writer-pending-p writer)
+                             (list server-socket-fd))
+                           (when (%client-output-queue-head output-queue)
+                             (list output-fd)))))
+            (multiple-value-bind (read-ready write-ready)
+                (select-fds read-fds +poll-timeout-us+ :write-fds write-fds)
+              (when (and stdin-open-p (member input-fd read-ready))
+                (let ((buffer (make-array +pty-buf-size+
+                                          :element-type '(unsigned-byte 8))))
+                  (multiple-value-bind (count status) (%client-read-fd input-fd buffer)
+                    (case status
+                      (:data
+                       (push (msg-key (if (= count (length buffer))
+                                          buffer
+                                          (subseq buffer 0 count)))
+                             outbound-back))
+                      (:eof
+                       (setf stdin-open-p nil)
+                       (push (msg-detach) outbound-back))
+                      (t nil)))))
+              (when (member server-socket-fd write-ready)
+                (write-frame-ready writer socket))
+              (when (member output-fd write-ready)
+                (%client-write-output-ready output-queue output-fd))
+              (when (and (member server-socket-fd read-ready)
+                         (null pending-event))
+                (multiple-value-bind (type payload status)
+                    (read-frame-ready
+                     reader socket
+                     :max-bytes (if reservation 65536 +header-size+))
+                  (case status
+                    (:frame (setf pending-event (list type payload)))
+                    (:eof (setf done t))
+                    (t nil))))))) (peer-io-failure (condition)
+        (format *error-output* "~&nerimux: connection lost: ~A~%" condition))) parting)
+)
 (defun run-client (name &key target)
-  "Attach to the server at (socket-path NAME): forward stdin + resizes, render
-   the frames the server returns, and exit on detach / server close.
-   TARGET is an optional explicit organization/repository/worktree selector;
-   the current working directory is sent for cwd-based attach selection.
-   The handshake and event loop are %RUN-ATTACH-SESSION (above); this
-   function only owns the terminal/socket setup and teardown around it,
-   including the parting line, which is printed here rather than in the loop
-   because it belongs on the host's normal screen, after DISABLE-HOST-MODES
-   has left the alternate screen the frames were drawn on."
+  "Attach to the server, relay input and frames, then restore both terminal modes."
   (require :sb-posix)
   (let ((socket (connect-to (socket-path name))))
     (unwind-protect
-        (let ((stream (socket-stream socket))
-              (server-socket-fd (socket-fd socket)))
-          (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
-          (setf *resize-pending* nil)
-          (install-sigwinch-handler)
-          (let ((parting
-                 (with-raw-mode
-                   (unwind-protect
-                        (progn
-                          (nerimux/renderer:enable-host-modes)
-                          (clear-display)
-                          (%paint-connecting-notice)
-                          (%run-attach-session stream server-socket-fd target))
-                     (nerimux/renderer:disable-host-modes)))))
-            (when parting
-              (format *error-output* "~&~A~%" parting)
-              (force-output *error-output*))))
-      (close-socket socket))))
+         (let* ((server-socket-fd (socket-fd socket))
+                (input-flags (%client-fd-flags 0))
+                (output-flags (%client-fd-flags 1))
+                (output-queue (%make-client-output-queue))
+                (parting nil))
+           (unwind-protect
+                (progn
+                  (%client-set-nonblocking 0)
+                  (%client-set-nonblocking 1)
+                  (multiple-value-setq (*term-rows* *term-cols*) (terminal-size))
+                  (setf *resize-pending* nil)
+                  (install-sigwinch-handler)
+                  (enable-raw-mode! 0)
+                  (unwind-protect
+                       (setf parting
+                             (progn
+                               (%client-enqueue-output
+                                output-queue
+                                (cl-codec-kit:string-to-octets
+                                 (format nil
+                                         "~C[?1049h~C[?2004h~C[?1004h~C[2J~C[Hnerimux: connecting..."
+                                         #\Escape #\Escape #\Escape #\Escape #\Escape)
+                                 :encoding :utf-8))
+                               (%run-attach-session socket server-socket-fd target
+                                                    output-queue)))
+                    (unwind-protect
+                         (%client-session-output output-queue)
+                      (disable-raw-mode! 0)))
+                  (when parting
+                    (format *error-output* "~&~A~%" parting)
+                    (force-output *error-output*)))
+             (unwind-protect
+                  (%client-restore-fd-flags 0 input-flags)
+               (%client-restore-fd-flags 1 output-flags))))
+      (close-socket socket :abort t))))
 
 (defun %read-kill-reply (stream)
   "Read frames from STREAM until a +msg-reply+ arrives or the connection

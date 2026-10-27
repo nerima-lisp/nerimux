@@ -220,11 +220,16 @@
               (adjust-array (frame-reader-buffer reader)
                             frame-size
                             :fill-pointer frame-size)))))
-
   (defun %reader-reset-frame (reader)
     (setf (frame-reader-buffer reader) (%make-frame-reader-buffer)
           (frame-reader-offset reader) 0
-          (frame-reader-frame-size reader) nil)))
+          (frame-reader-frame-size reader) nil))
+  (defun frame-reader-payload-size (reader)
+    "Return the declared payload size after the reader has parsed a frame header."
+    (check-type reader frame-reader)
+    (let ((frame-size (frame-reader-frame-size reader)))
+      (when frame-size
+        (- frame-size +header-size+)))))
 (defun read-frame-ready (reader socket &key (max-bytes 65536))
   "Return TYPE and PAYLOAD with :FRAME when one frame completes. Return NIL,
    NIL, and :PENDING when this call made progress but the frame is incomplete;

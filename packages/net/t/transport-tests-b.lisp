@@ -235,6 +235,7 @@
             (expect (null type))
             (expect (null payload))
             (expect (eql :pending status)))
+          (expect (= 3 (nerimux/transport:frame-reader-payload-size reader)))
           (expect (= 1 (sb-bsd-sockets:socket-send
                         client (subseq frame 5 6) 1 :dontwait t :nosignal t)))
           (multiple-value-bind (type payload status)
@@ -248,7 +249,9 @@
               (nerimux/transport:read-frame-ready reader conn :max-bytes 2)
             (expect (= +msg-key+ type))
             (expect (equalp #(1 2 3) payload))
-            (expect (eql :frame status)))))))
+            (expect (eql :frame status)))
+          (expect (null (nerimux/transport:frame-reader-payload-size reader)))))))
+
   (it "read-frame-ready-rejects-oversized-length-before-payload-allocation"
     (let* ((reader (nerimux/transport:make-frame-reader))
            (header (make-array +header-size+ :element-type '(unsigned-byte 8)

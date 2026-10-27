@@ -47,7 +47,7 @@
    #:frame-reader #:frame-reader-p #:make-frame-reader #:read-frame-ready
    #:frame-writer #:frame-writer-p #:make-frame-writer
    #:start-frame-write #:write-frame-ready
-   #:frame-writer-pending-p #:frame-writer-offset #:frame-writer-failed-p))
+   #:frame-writer-pending-p #:frame-writer-offset #:frame-writer-failed-p #:frame-reader-payload-size))
 
 (defpackage #:nerimux/net
             (:use #:cl)
