@@ -548,6 +548,92 @@
                                    first-frame second-frame)
                       sent))
       (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))))
+  (it "client-output-keeps-partial-render-whole-across-controls-and-bye"
+    (let* ((conn (%make-test-conn))
+           (render-one (nerimux/protocol:msg-frame "render one"))
+           (notification-one
+             (nerimux/protocol:msg-notification #(27 91 50 74)))
+           (reply-one (nerimux/protocol:msg-reply "reply one"))
+           (render-two (nerimux/protocol:msg-frame "render two"))
+           (notification-two
+             (nerimux/protocol:msg-notification #(27 91 51 74)))
+           (reply-two (nerimux/protocol:msg-reply "reply two"))
+           (discarded-render (nerimux/protocol:msg-frame "discarded render"))
+           (bye (nerimux/protocol:msg-bye))
+           (sent (make-array 0 :element-type '(unsigned-byte 8)))
+           (expected
+             (concatenate '(vector (unsigned-byte 8))
+                          render-one notification-one reply-one render-two
+                          notification-two reply-two bye))
+           (calls 0)
+           (nerimux::*clients* (list conn)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-render-state conn render-one nil)))
+      (with-stubbed-fdefinition
+          ((sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket dontwait nosignal))
+              (incf calls)
+              (let ((written (case calls
+                               (1 (min 3 length))
+                               (5 (min 2 length))
+                               (otherwise length))))
+                (setf sent
+                      (concatenate '(vector (unsigned-byte 8))
+                                   sent
+                                   (subseq buffer 0 written)))
+                written))))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn :max-bytes 3)
+          (expect (eq :pending status))
+          (expect (= 3 bytes-written)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-control-frame
+                     conn notification-one)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-control-frame conn reply-one)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-render-state
+                     conn render-two nil)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn)
+          (expect (eq :complete status))
+          (expect (= (- (length render-one) 3) bytes-written)))
+        (expect (eq :complete
+                    (nerimux::%advance-client-output conn)))
+        (expect (eq :complete
+                    (nerimux::%advance-client-output conn)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn :max-bytes 2)
+          (expect (eq :pending status))
+          (expect (= 2 bytes-written)))
+        (expect (eq render-two
+                    (nerimux::client-conn-active-output-frame conn)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-control-frame
+                     conn notification-two)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-control-frame conn reply-two)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-render-state
+                     conn discarded-render nil)))
+        (expect (eq :closing (nerimux::%drop-client conn :bye t)))
+        (expect (nerimux::client-conn-close-after-write-p conn))
+        (expect (null (nerimux::client-conn-pending-render-state conn)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn)
+          (expect (eq :complete status))
+          (expect (= (- (length render-two) 2) bytes-written)))
+        (expect (eq :complete
+                    (nerimux::%advance-client-output conn)))
+        (expect (eq :complete
+                    (nerimux::%advance-client-output conn)))
+        (expect (eq :complete
+                    (nerimux::%advance-client-output conn))))
+      (expect (not (member conn nerimux::*clients* :test #'eq))
+              :to-be-truthy)
+      (expect (equalp expected sent))
+      (expect (= (length expected) (length sent)))))
   (it "client-output-writers-round-robin-two-pending-clients"
     (let* ((conn-a (%make-test-conn))
            (conn-b (%make-test-conn))
