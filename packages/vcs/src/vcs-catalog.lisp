@@ -179,10 +179,23 @@ vcs-inspect.lisp for the race this closes."
 
 (defun %preserve-worktree-state (source target)
   "Carry cached status and interaction state from SOURCE onto TARGET."
+  (let ((status-state
+          (nerimux/workspace-model:worktree-status-state source)))
+    (progn
+      (when (eq status-state :stale)
+        (nerimux/workspace-model:worktree-transition-status
+         target :ready
+         :snapshot (nerimux/workspace-model:worktree-status source)
+         :snapshot-supplied-p t))
+      (nerimux/workspace-model:worktree-transition-status
+       target
+       (if (eq status-state :stale) :read-error status-state)
+       :snapshot (nerimux/workspace-model:worktree-status source)
+       :snapshot-supplied-p t
+       :error-message
+       (nerimux/workspace-model:worktree-status-error-message source))))
   (setf (nerimux/workspace-model:worktree-id target)
         (nerimux/workspace-model:worktree-id source)
-        (nerimux/workspace-model:worktree-status target)
-        (nerimux/workspace-model:worktree-status source)
         (nerimux/workspace-model:worktree-head target)
         (nerimux/workspace-model:worktree-head source)
         (nerimux/workspace-model:worktree-dirty-p target)
@@ -195,14 +208,16 @@ vcs-inspect.lisp for the race this closes."
         (nerimux/workspace-model:worktree-behind source)
         (nerimux/workspace-model:worktree-missing-p target)
         (nerimux/workspace-model:worktree-missing-p source)
-        (nerimux/workspace-model:worktree-read-error-p target)
-        (nerimux/workspace-model:worktree-read-error-p source)
         (nerimux/workspace-model:worktree-changed-files target)
         (nerimux/workspace-model:worktree-changed-files source)
         (nerimux/workspace-model:worktree-additions target)
         (nerimux/workspace-model:worktree-additions source)
         (nerimux/workspace-model:worktree-deletions target)
         (nerimux/workspace-model:worktree-deletions source)
+        (nerimux/workspace-model:worktree-numstat-state target)
+        (nerimux/workspace-model:worktree-numstat-state source)
+        (nerimux/workspace-model:worktree-numstat-error-message target)
+        (nerimux/workspace-model:worktree-numstat-error-message source)
         (nerimux/workspace-model:worktree-staged-files target)
         (nerimux/workspace-model:worktree-staged-files source)
         (nerimux/workspace-model:worktree-unstaged-files target)
@@ -219,6 +234,8 @@ vcs-inspect.lisp for the race this closes."
         (nerimux/workspace-model:worktree-stashes-state source)
         (nerimux/workspace-model:worktree-stashes target)
         (nerimux/workspace-model:worktree-stashes source)
+        (nerimux/workspace-model:worktree-stashes-error-message target)
+        (nerimux/workspace-model:worktree-stashes-error-message source)
         (nerimux/workspace-model:worktree-completed-p target)
         (nerimux/workspace-model:worktree-completed-p source)
         (nerimux/workspace-model:worktree-agent-pane target)

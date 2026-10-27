@@ -16,60 +16,113 @@ signals %GIT-READ-ERROR.")
   "Deadline for one %RUN-GIT-READ call. A process that exceeds it is terminated
 and reported as %GIT-READ-ERROR.")
 
+(defconstant +status-error-message-max-length+ 400
+  "Maximum characters retained for a displayed status failure reason.")
+
 (define-condition %git-read-error (error)
   ((directory :initarg :directory :reader %git-read-error-directory)
    (subcommand :initarg :subcommand :reader %git-read-error-subcommand)
    (arguments :initarg :arguments :reader %git-read-error-arguments)
    (exit-code :initarg :exit-code :initform nil :reader %git-read-error-exit-code)
    (output-limit :initarg :output-limit :initform nil
-                 :reader %git-read-error-output-limit))
+                 :reader %git-read-error-output-limit)
+   (stderr :initarg :stderr :initform nil :reader %git-read-error-stderr))
   (:report
    (lambda (condition stream)
-     (format stream "git ~A~{ ~A~} in ~A failed~@[ (exit ~D)~]~@[ (stdout exceeded ~D-byte limit)~]"
+     (format stream "git ~A failed~@[ (exit ~D)~]~@[ (stdout exceeded ~D-byte limit)~]~@[ : ~A~]"
              (%git-read-error-subcommand condition)
-             (%git-read-error-arguments condition)
-             (%git-read-error-directory condition)
              (%git-read-error-exit-code condition)
-             (%git-read-error-output-limit condition))))
+             (%git-read-error-output-limit condition)
+             (%git-read-error-stderr condition))))
   (:documentation
    "Signaled by %RUN-GIT-READ for a non-zero git exit, stdout overflow, timeout,
 or launch failure."))
 
+(defun %sanitize-status-error-text (text)
+  "Collapse control characters to spaces and cap TEXT for a one-line UI reason."
+  (let ((clean
+          (with-output-to-string (stream)
+            (loop for character across (if (stringp text) text "")
+                  do (cond
+                       ((or (char= character #\Newline)
+                            (char= character #\Return)
+                            (char= character #\Tab))
+                        (write-char #\Space stream))
+                       ((not (nerimux/text:control-character-p character))
+                        (write-char character stream)))))))
+    (let ((clean (string-trim '(#\Space) clean)))
+      (if (> (length clean) +status-error-message-max-length+)
+          (concatenate 'string
+                       (subseq clean 0 (- +status-error-message-max-length+ 3))
+                       "...")
+          clean))))
+
+(defun %git-read-error-message (condition)
+  "Return a bounded, single-line explanation suitable for model and renderer."
+  (if (typep condition '%git-read-error)
+      (let* ((command
+               (format nil "git ~A" (%git-read-error-subcommand condition)))
+             (exit-code (%git-read-error-exit-code condition))
+             (stderr (%git-read-error-stderr condition))
+             (detail
+               (or stderr
+                   (and (%git-read-error-output-limit condition)
+                        (format nil "output exceeded ~D-byte limit"
+                                (%git-read-error-output-limit condition)))
+                   "no diagnostic output")))
+        (%sanitize-status-error-text
+         (if exit-code
+             (format nil "~A exited ~D: ~A" command exit-code detail)
+             (format nil "~A failed: ~A" command detail))))
+      (%sanitize-status-error-text (princ-to-string condition))))
+
+(defun %process-result-stderr-text (result)
+  (let ((stderr (process-kit:process-result-stderr result)))
+    (cond
+      ((null stderr) nil)
+      ((stringp stderr) (%sanitize-status-error-text stderr))
+      (t
+       (%sanitize-status-error-text
+        (sb-ext:octets-to-string stderr
+                                 :external-format '(:utf-8 :replacement #\?)))))))
+
 (defun %run-git-read (directory subcommand &rest arguments)
   "Run git through VCS-KIT with a deadline and bounded octet capture."
   (let ((result
-         (handler-case
-             (apply (function vcs-kit:run-vcs)
-                    nil subcommand arguments
-                    (append
-                     (list :executable "git"
-                           :directory directory
-                           :input ""
-                           :timeout *git-read-timeout-seconds*
-                           :output :capture
-                           :error-output :capture
-                           :result-type :octets
-                           :max-output-characters *git-read-output-limit*)
-                     (when (or *worktree-test-environment-update*
-                               (string= subcommand "diff"))
-                       (list :environment-update
-                             (append
-                              (remove-if
-                               (lambda (entry)
-                                 (and (string= subcommand "diff")
-                                      (string= (car entry) "GIT_LITERAL_PATHSPECS")))
-                               *worktree-test-environment-update*)
-                              (when (string= subcommand "diff")
-                                (list (cons "GIT_LITERAL_PATHSPECS" nil))))))))
-           (vcs-kit:vcs-command-error ()
-                                      (error '%git-read-error
-                                             :directory directory
-                                             :subcommand subcommand
-                                             :arguments arguments)))))
+          (handler-case
+              (apply (function vcs-kit:run-vcs)
+                     nil subcommand arguments
+                     (append
+                      (list :executable "git"
+                            :directory directory
+                            :input ""
+                            :timeout *git-read-timeout-seconds*
+                            :output :capture
+                            :error-output :capture
+                            :result-type :octets
+                            :max-output-characters *git-read-output-limit*)
+                      (when (or *worktree-test-environment-update*
+                                (string= subcommand "diff"))
+                        (list :environment-update
+                              (append
+                               (remove-if
+                                (lambda (entry)
+                                  (and (string= subcommand "diff")
+                                       (string= (car entry) "GIT_LITERAL_PATHSPECS")))
+                                *worktree-test-environment-update*)
+                               (when (string= subcommand "diff")
+                                 (list (cons "GIT_LITERAL_PATHSPECS" nil))))))))
+            (vcs-kit:vcs-command-error (condition)
+              (error '%git-read-error
+                     :directory directory
+                     :subcommand subcommand
+                     :arguments arguments
+                     :stderr (%sanitize-status-error-text
+                              (princ-to-string condition)))))))
     (let* ((success-p (process-kit:process-success-p result))
            (output-limit
-            (when (process-kit:process-result-stdout-truncated-p result)
-              *git-read-output-limit*)))
+             (when (process-kit:process-result-stdout-truncated-p result)
+               *git-read-output-limit*)))
       (when (or (not success-p) output-limit)
         (error '%git-read-error
                :directory directory
@@ -77,10 +130,11 @@ or launch failure."))
                :arguments arguments
                :exit-code (unless success-p
                             (process-kit:process-result-exit-code result))
-               :output-limit output-limit)))
+               :output-limit output-limit
+               :stderr (%process-result-stderr-text result))))
     (sb-ext:octets-to-string
      (process-kit:process-result-stdout result)
-     :external-format (quote (:utf-8 :replacement #\?)))))
+     :external-format '(:utf-8 :replacement #\?))))
 
 (defun %git-status-snapshot (directory)
   "DIRECTORY's status as a VCS-KIT:VCS-STATUS-SNAPSHOT with VCS-STATUS-ENTRY
@@ -259,8 +313,22 @@ that duplication is magit's own display behaviour, not a bug."
 column, worktree side) -- magit's unstaged section (Unit MODEL)."
   (%collect-status-files entries vcs-kit:vcs-status-entry-worktree-status))
 
-(defun %worktree-status-diff-line-counts (directory &optional (entries nil entries-supplied-p))
-  "Return additions and deletions for eligible paths in DIRECTORY."
+(defstruct (%numstat-result
+             (:constructor %make-numstat-result
+                 (&key state additions deletions error-message)))
+  state
+  additions
+  deletions
+  error-message)
+
+(defun %status-failure-message (condition)
+  (if (typep condition '%git-read-error)
+      (%git-read-error-message condition)
+      (%sanitize-status-error-text (princ-to-string condition))))
+
+(defun %worktree-status-diff-line-counts
+    (directory &optional (entries nil entries-supplied-p))
+  "Return a typed numstat reading for eligible paths in DIRECTORY."
   (handler-case
       (let* ((paths
                (when entries-supplied-p
@@ -278,70 +346,84 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
                    (and paths (%git-numstat-entries directory paths))
                    (%git-numstat-entries directory))))
         (if (and entries-supplied-p (null paths))
-            (values 0 0)
+            (%make-numstat-result
+             :state :ready :additions 0 :deletions 0)
             (let ((additions 0)
                   (deletions 0))
-              (dolist (entry numstat-entries (values additions deletions))
+              (dolist (entry numstat-entries)
                 (incf additions (or (vcs-kit:numstat-entry-additions entry) 0))
-                (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0))))))
+                (incf deletions (or (vcs-kit:numstat-entry-deletions entry) 0)))
+              (%make-numstat-result
+               :state :ready :additions additions :deletions deletions))))
     (error (condition)
-      (log-kit:emit-log
-       *vcs-diagnostic-logger*
-       log-kit:+level-warn+
-       (format nil "Git numstat failed in ~A" directory)
-       (list :directory directory
-             :condition (princ-to-string condition)))
-      (values 0 0))))
+      (handler-case
+          (log-kit:emit-log
+           *vcs-diagnostic-logger*
+           log-kit:+level-warn+
+           (format nil "Git numstat failed in ~A" directory)
+           (list :directory directory
+                 :condition (princ-to-string condition)))
+        (error () nil))
+      (%make-numstat-result
+       :state :failed
+       :additions nil
+       :deletions nil
+       :error-message (%status-failure-message condition)))))
 
 (declaim (ftype function %read-stashes-at))
 
 (defun %read-worktree-status-at (path fallback-head repository-path
                                   &key (stashes nil stashes-supplied-p))
-  "STASHES, when supplied, is a (STATE . ENTRIES) reading in the shape
-%READ-STASHES-AT returns, used in place of reading one here -- refs/stash is
-shared by every worktree of one repository, so a caller refreshing several at
-once reads it exactly once and passes the same reading down (see
-%REPOSITORY-STATUS-SHARED-STASHES and %RAW-WORKTREES-SHARED-STASHES)."
+  "Read status, numstat, and the shared stash result for PATH."
   (multiple-value-bind (directory missing-p)
       (%worktree-status-directory path repository-path)
     (if missing-p
         (%make-worktree-status-update
          :path path :missing-p t :head fallback-head :ahead 0 :behind 0
-         :additions 0 :deletions 0)
+         :numstat-state :ready :additions 0 :deletions 0)
         (handler-case
-            (let* ((snapshot
-                     (%git-status-snapshot directory))
+            (let* ((snapshot (%git-status-snapshot directory))
                    (entries (vcs-kit:vcs-status-snapshot-entries snapshot))
                    (branch-head
                      (vcs-kit:vcs-status-snapshot-branch-head snapshot))
                    (stash-reading
                      (if stashes-supplied-p stashes
-                         (%read-stashes-at directory))))
-              (multiple-value-bind (additions deletions)
-                  (if (some (function %numstat-eligible-entry-p) entries)
-                      (%worktree-status-diff-line-counts directory entries)
-                      (values 0 0))
-                (%make-worktree-status-update
-                 :path path :snapshot snapshot
-                 :head (or branch-head fallback-head)
-                 :dirty-p (not (null entries))
-                 :conflict-p (not (null (some (function %status-entry-conflict-p) entries)))
-                 :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
-                 ;; cl-vcs-kit currently copies the signed behind field into
-                 ;; its backend-neutral snapshot; nerimux stores the count.
-                 :behind (abs (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0))
-                 :additions additions
-                 :deletions deletions
-                 :changed-files (%worktree-status-changed-files entries)
-                 :stashes stash-reading)))
+                         (%read-stashes-at directory)))
+                   (numstat
+                     (if (some (function %numstat-eligible-entry-p) entries)
+                         (%worktree-status-diff-line-counts directory entries)
+                         (%make-numstat-result
+                          :state :ready :additions 0 :deletions 0))))
+              (%make-worktree-status-update
+               :path path :status-state :ready :snapshot snapshot
+               :head (or branch-head fallback-head)
+               :dirty-p (not (null entries))
+               :conflict-p
+               (not (null (some (function %status-entry-conflict-p) entries)))
+               :ahead (or (vcs-kit:vcs-status-snapshot-ahead snapshot) 0)
+               ;; cl-vcs-kit currently copies the signed behind field into its
+               ;; backend-neutral snapshot; nerimux stores the count.
+               :behind (abs (or (vcs-kit:vcs-status-snapshot-behind snapshot) 0))
+               :numstat-state (%numstat-result-state numstat)
+               :numstat-error-message (%numstat-result-error-message numstat)
+               :additions (%numstat-result-additions numstat)
+               :deletions (%numstat-result-deletions numstat)
+               :changed-files (%worktree-status-changed-files entries)
+               :stashes stash-reading))
           (%git-read-error (condition)
-            (log-kit:emit-log
-             *vcs-diagnostic-logger*
-             log-kit:+level-warn+
-             (format nil "Git status could not be read in ~A" directory)
-             (list :directory directory
-                   :condition (princ-to-string condition)))
-            (%make-worktree-status-update :path path :read-error-p t))))))
+            (handler-case
+                (log-kit:emit-log
+                 *vcs-diagnostic-logger*
+                 log-kit:+level-warn+
+                 (format nil "Git status could not be read in ~A" directory)
+                 (list :directory directory
+                       :condition (princ-to-string condition)))
+              (error () nil))
+            (%make-worktree-status-update
+             :path path
+             :status-state :read-error
+             :status-error-message (%git-read-error-message condition))))))
+)
 
 (defun %read-worktree-status (worktree &key (stashes nil stashes-supplied-p))
   "As %READ-WORKTREE-STATUS-AT, resolving WORKTREE's own path/head/repository
@@ -363,16 +445,20 @@ read."
               (nerimux/workspace-model:repository-local-path repository))))))
 
 (defun %apply-worktree-stash-reading (worktree update)
-  "Move UPDATE's stash reading, when its pass took one, onto WORKTREE.
-
-The reading travels inside the update so it is applied only with the capture
-it was read beside: keyed by path outside the struct, a capture the generation
-check discarded stayed behind and was applied next to a different snapshot."
+  "Apply the stash result captured beside UPDATE's status snapshot."
   (let ((reading (%worktree-status-update-stashes update)))
     (when reading
-      (setf (nerimux/workspace-model:worktree-stashes worktree) (cdr reading)
-            (nerimux/workspace-model:worktree-stashes-state worktree)
-            (car reading)))))
+      (if (typep reading '%stash-reading)
+          (setf (nerimux/workspace-model:worktree-stashes worktree)
+                (%stash-reading-entries reading)
+                (nerimux/workspace-model:worktree-stashes-state worktree)
+                (%stash-reading-state reading)
+                (nerimux/workspace-model:worktree-stashes-error-message worktree)
+                (%stash-reading-error-message reading))
+          (setf (nerimux/workspace-model:worktree-stashes worktree) (cdr reading)
+                (nerimux/workspace-model:worktree-stashes-state worktree) (car reading)
+                (nerimux/workspace-model:worktree-stashes-error-message worktree)
+                nil)))))
 
 (defun %apply-worktree-status (repository update)
   (let* ((worktree
@@ -383,16 +469,18 @@ check discarded stayed behind and was applied next to a different snapshot."
     (unless worktree
       (error "Status update refers to an unknown worktree: ~A"
              (%worktree-status-update-path update)))
-    (if (%worktree-status-update-read-error-p update)
-        (setf (nerimux/workspace-model:worktree-missing-p worktree) nil
-              (nerimux/workspace-model:worktree-read-error-p worktree) t)
+    (if (eq :read-error (%worktree-status-update-status-state update))
+        (progn
+          (setf (nerimux/workspace-model:worktree-missing-p worktree) nil)
+          (nerimux/workspace-model:worktree-transition-status
+           worktree :read-error
+           :error-message (%worktree-status-update-status-error-message update)))
         (progn
           (setf (nerimux/workspace-model:worktree-missing-p worktree)
-                (%worktree-status-update-missing-p update)
-                (nerimux/workspace-model:worktree-read-error-p worktree) nil
-                (nerimux/workspace-model:worktree-status worktree)
-                (%worktree-status-update-snapshot update)
-                (nerimux/workspace-model:worktree-head worktree)
+                (%worktree-status-update-missing-p update))
+          (nerimux/workspace-model:worktree-transition-status
+           worktree :ready :snapshot snapshot :snapshot-supplied-p t)
+          (setf (nerimux/workspace-model:worktree-head worktree)
                 (%worktree-status-update-head update)
                 (nerimux/workspace-model:worktree-dirty-p worktree)
                 (%worktree-status-update-dirty-p update)
@@ -402,10 +490,6 @@ check discarded stayed behind and was applied next to a different snapshot."
                 (%worktree-status-update-ahead update)
                 (nerimux/workspace-model:worktree-behind worktree)
                 (%worktree-status-update-behind update)
-                (nerimux/workspace-model:worktree-additions worktree)
-                (%worktree-status-update-additions update)
-                (nerimux/workspace-model:worktree-deletions worktree)
-                (%worktree-status-update-deletions update)
                 (nerimux/workspace-model:worktree-changed-files worktree)
                 (%worktree-status-update-changed-files update)
                 (nerimux/workspace-model:worktree-untracked-files worktree)
@@ -415,7 +499,16 @@ check discarded stayed behind and was applied next to a different snapshot."
                 (nerimux/workspace-model:worktree-staged-files worktree)
                 (%worktree-status-staged-files entries)
                 (nerimux/workspace-model:worktree-unstaged-files worktree)
-                (%worktree-status-unstaged-files entries))
+                (%worktree-status-unstaged-files entries)
+                (nerimux/workspace-model:worktree-numstat-state worktree)
+                (%worktree-status-update-numstat-state update)
+                (nerimux/workspace-model:worktree-numstat-error-message worktree)
+                (%worktree-status-update-numstat-error-message update))
+          (when (eq :ready (%worktree-status-update-numstat-state update))
+            (setf (nerimux/workspace-model:worktree-additions worktree)
+                  (%worktree-status-update-additions update)
+                  (nerimux/workspace-model:worktree-deletions worktree)
+                  (%worktree-status-update-deletions update)))
           (%apply-worktree-stash-reading worktree update)))
     worktree))
 

@@ -915,16 +915,9 @@
             (nerimux/workspace-model:make-worktree :id "wt-gone" :missing-p t))
           (dirty
             (nerimux/workspace-model:make-worktree :id "wt-dirty" :dirty-p t))
-          (read-error (nerimux/workspace-model:make-worktree :id "wt-read-error")))
-      (let* ((accessor
-               (find-symbol "WORKTREE-READ-ERROR-P" :nerimux/workspace-model))
-             (setter
-               (and accessor
-                    (fboundp (list (find-symbol "SETF" :cl) accessor))
-                    (fdefinition (list (find-symbol "SETF" :cl) accessor)))))
-        (expect accessor)
-        (when setter
-          (funcall setter t read-error)))
+          (read-error (nerimux/workspace-model:make-worktree
+             :id "wt-read-error"
+             :read-error-p t)))
       (let ((repository
               (nerimux/workspace-model:make-repository
                :id "repo-read-error" :worktrees (list read-error))))

@@ -411,7 +411,7 @@
         (nerimux/vcs:set-workspace-organizations previous)))))
 
 (describe "vcs workspace catalog commit-state preservation (F1)"
-  (it "carries id, commits-state and recent-commits across a full catalog rescan matched by path"
+  (it "preserves stale cached status and commit state across a full catalog rescan matched by path"
     (let* ((previous (nerimux/vcs:workspace-organizations))
            (old-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "f1-owner"))
@@ -420,7 +420,9 @@
                             :local-path "work/f1-project"))
            (old-worktree (nerimux/workspace-model:make-worktree
                           :path "work/f1-project/wt" :branch "feature/f1"
-                          :head "old-head"))
+                          :head "old-head" :status (list :cached t)
+                          :status-state :stale
+                          :status-error-message "status refresh failed"))
            (new-organization (nerimux/workspace-model:make-organization
                               :host "vcs-host" :name "f1-owner"))
            (new-repository (nerimux/workspace-model:make-repository
@@ -452,6 +454,14 @@
                                    "work/f1-project/wt")))
                    (expect (not (eq published rescanned)))
                    (expect (string= first-id (nerimux/workspace-model:worktree-id rescanned)))
+                   (expect (eq :stale
+                               (nerimux/workspace-model:worktree-status-state rescanned)))
+                   (expect (equal (list :cached t)
+                                  (nerimux/workspace-model:worktree-status rescanned)))
+                   (expect (equal "status refresh failed"
+                                  (nerimux/workspace-model:worktree-status-error-message
+                                   rescanned)))
+                   (expect (nerimux/workspace-model:worktree-read-error-p rescanned))
                    (expect (eq :ready (nerimux/workspace-model:worktree-commits-state rescanned)))
                    (expect (equal (list (cons "abc1234" "a settled commit"))
                                   (nerimux/workspace-model:worktree-recent-commits rescanned)))))))

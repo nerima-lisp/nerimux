@@ -198,12 +198,12 @@ traversal). Never a VCS-KIT:VCS-STASH-ENTRY struct crosses this boundary (D1)."
    (%git-stash-entries directory)))
 
 (defun %read-stashes-at (directory)
-  "(STATE . STASHES) for DIRECTORY, the shape WORKTREE-STASHES-STATE/
-WORKTREE-STASHES take: (:READY . ENTRIES), or (:FAILED) for a directory git
-will not list stashes for. Called on the status pass's worker thread."
-  (handler-case (cons :ready (%list-stashes-at directory))
-    (error ()
-      (cons :failed nil))))
+  "Return a bounded stash result for DIRECTORY."
+  (handler-case
+      (%make-stash-reading :ready (%list-stashes-at directory))
+    (error (condition)
+      (%make-stash-reading
+       :failed nil (%status-failure-message condition)))))
 
 (defun list-worktree-stashes (worktree)
   "WORKTREE's stashes, see %LIST-STASHES-AT."

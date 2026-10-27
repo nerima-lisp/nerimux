@@ -1265,7 +1265,8 @@
              (release-reader (sb-thread:make-semaphore :count 0))
              (error-reported (sb-thread:make-semaphore :count 0))
              (completed-event (sb-thread:make-semaphore :count 0))
-             (errors nil) (applied 0) (completion-count 0) (threads nil))
+             (errors nil)
+             (applied 0) (completion-count 0) (threads nil))
         (dolist (repository (list failed-repository ready-repository))
           (nerimux/workspace-model:repository-add-worktree
            repository
@@ -1273,6 +1274,11 @@
             :repository repository
             :path (format nil "/tmp/status-preparation-error/~D"
                           (if (eq repository failed-repository) 1 2)))))
+        (nerimux/workspace-model:repository-add-worktree
+         failed-repository
+         (nerimux/workspace-model:make-worktree
+          :repository failed-repository
+          :path "/tmp/status-preparation-error/2"))
         (with-stubbed-fdefinition
             ((nerimux/vcs::%repository-status-shared-stashes
                (lambda (repository)
@@ -1297,7 +1303,16 @@
                           (incf applied))
                         :on-error
                         (lambda (repository condition)
-                          (push (list repository condition) errors)
+                          (let ((worktree
+                                  (first
+                                   (nerimux/workspace-model:repository-worktrees
+                                    repository))))
+                            (push
+                             (list
+                              repository condition
+                              (nerimux/workspace-model:worktree-status-state worktree)
+                              (nerimux/workspace-model:worktree-status-error-message worktree))
+                             errors))
                           (sb-thread:signal-semaphore error-reported))
                         :on-complete
                         (lambda (completed)
@@ -1319,7 +1334,24 @@
         (expect (= 1 (length errors)))
         (expect (eq failed-repository (first (first errors))))
         (expect (typep (second (first errors)) 'error))
-        (expect (= 1 applied))
+        (progn
+          (expect (eq :read-error (third (first errors))))
+          (expect (equal "Fixture stash read failed" (fourth (first errors))))
+          (expect (= 1 applied))
+          (let ((worktrees
+                  (nerimux/workspace-model:repository-worktrees
+                   failed-repository)))
+            (expect (= 2 (length worktrees)))
+            (expect
+             (every
+              (lambda (worktree)
+                (and (eq :read-error
+                         (nerimux/workspace-model:worktree-status-state
+                          worktree))
+                     (equal "Fixture stash read failed"
+                            (nerimux/workspace-model:worktree-status-error-message
+                             worktree))))
+              worktrees))))
         (expect (= 1 completion-count))))
  (it "discards a stale status result after a newer workspace generation applies"
       (let* ((repository

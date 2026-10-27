@@ -328,13 +328,35 @@
                                (zerop (decf remaining)))))
                        (when (and complete-p on-complete)
                          (funcall on-complete repositories))))
-                   (fail-one (repository entry condition)
+                   (fail-one (repository entry condition &optional request)
                      (unwind-protect
-                          (if on-error
-                              (funcall on-error repository condition)
-                              (error condition))
+                         (progn
+                           (when request
+                             (handler-case
+                                 (let ((request-repository
+                                         (%workspace-status-request-repository request))
+                                       (token (%workspace-status-request-token request))
+                                       (message (%status-failure-message condition)))
+                                   (sb-thread:with-recursive-lock
+                                       (*workspace-catalog-generation-lock*)
+                                     (when (%repository-data-generation-current-p
+                                            request-repository token :before-apply t)
+                                       (loop for worktree across
+                                             (%workspace-status-request-worktrees request)
+                                             do
+                                                (nerimux/workspace-model:worktree-transition-status
+                                                 worktree :read-error :error-message message)))))
+                               (error (status-error)
+                                 (%emit-vcs-diagnostic
+                                  *vcs-diagnostic-logger*
+                                  log-kit:+level-warn+
+                                  "Workspace status failure could not be applied"
+                                  (list :condition (princ-to-string status-error))))))
+                           (if on-error
+                               (funcall on-error repository condition)
+                               (error condition)))
                        (complete-one repository entry)))
-                   (apply-one (repository entry token update)
+                   (apply-one (repository entry token update &optional request)
                      (let ((condition
                              (handler-case
                                  (progn
@@ -351,53 +373,56 @@
                                (error (caught)
                                  caught))))
                        (if condition
-                           (fail-one repository entry condition)
+                           (fail-one repository entry condition request)
                            (complete-one repository entry))))
                    (settle-request (request)
-                      (let ((worker-settlement-p nil))
-                        (cl-concurrent-kit:with-lock-held (queue-lock)
-                          (unless (%workspace-status-request-workers-settled-p request)
-                            (setf (%workspace-status-request-workers-settled-p request) t
-                                  worker-settlement-p t)
-                            (decf pending-worker-requests)))
-                        (when worker-settlement-p
-                          (maybe-stop-status-workers)
-                          (let* ((repository
-                                   (%workspace-status-request-repository request))
-                                 (entry (%workspace-status-request-entry request))
-                                 (condition (request-condition request))
-                                 (dispatch-state :pending)
-                                 (callback (if condition #'fail-one #'apply-one))
-                                 (arguments
-                                   (if condition
-                                       (list repository entry condition)
-                                       (list repository
-                                             entry
-                                             (%workspace-status-request-token request)
-                                             (coerce
-                                              (%workspace-status-request-updates request)
-                                              'list)))))
-                            (handler-case
-                                (%dispatch-callback
-                                 callback-dispatch
-                                 (lambda ()
-                                   (let ((run-p nil))
-                                     (cl-concurrent-kit:with-lock-held (queue-lock)
-                                       (when (eq dispatch-state :pending)
-                                         (setf dispatch-state :running
-                                               run-p t)))
-                                     (when run-p
-                                       (apply callback arguments)))))
-                              (error (caught)
-                                (let ((fallback-p nil))
-                                  (cl-concurrent-kit:with-lock-held (queue-lock)
-                                    (when (eq dispatch-state :pending)
-                                      (setf dispatch-state :fallback
-                                            fallback-p t)))
-                                  (if fallback-p
-                                      (fail-one repository entry caught)
-                                      (error caught))))))))
-                    )
+                     (let ((worker-settlement-p nil))
+                       (cl-concurrent-kit:with-lock-held (queue-lock)
+                         (unless (%workspace-status-request-workers-settled-p request)
+                           (setf (%workspace-status-request-workers-settled-p request) t
+                                 worker-settlement-p t)
+                           (decf pending-worker-requests)))
+                       (when worker-settlement-p
+                         (maybe-stop-status-workers)
+                         (let* ((repository
+                                  (%workspace-status-request-repository request))
+                                (entry (%workspace-status-request-entry request))
+                                (condition (request-condition request))
+                                (dispatch-state :pending)
+                                (callback
+                                  (if condition
+                                      (lambda (failed-repository failed-entry caught)
+                                        (fail-one failed-repository failed-entry caught request))
+                                      (lambda (ready-repository ready-entry token updates)
+                                        (apply-one ready-repository ready-entry token updates request))))
+                                (arguments
+                                  (if condition
+                                      (list repository entry condition)
+                                      (list repository
+                                            entry
+                                            (%workspace-status-request-token request)
+                                            (coerce
+                                             (%workspace-status-request-updates request)
+                                             'list)))))
+                           (handler-case
+                               (%dispatch-callback
+                                callback-dispatch
+                                (lambda ()
+                                  (let ((run-p nil))
+                                    (cl-concurrent-kit:with-lock-held (queue-lock)
+                                      (when (eq dispatch-state :pending)
+                                        (setf dispatch-state :running
+                                              run-p t)))
+                                    (when run-p
+                                      (apply callback arguments))))) (error (caught)
+                               (let ((fallback-p nil))
+                                 (cl-concurrent-kit:with-lock-held (queue-lock)
+                                   (when (eq dispatch-state :pending)
+                                     (setf dispatch-state :fallback
+                                           fallback-p t)))
+                                 (if fallback-p
+                                     (fail-one repository entry caught request)
+                                     (error caught)))))))))
                    (mark-request-ready (request stashes condition)
                       (let ((settle-p nil))
                         (cl-concurrent-kit:with-lock-held (queue-lock)
@@ -433,7 +458,7 @@
                    (prepare-repositories ()
                       (loop for request = (next-preparation-request)
                             while request
-                            do (handler-case
+                            do (let ((request request)) (handler-case
                                    (handler-case
                                        (let ((stashes nil)
                                              (condition nil))
@@ -441,8 +466,16 @@
                                              (progn
                                                (%dispatch-callback
                                                 callback-dispatch
-                                                on-start
-                                                (%workspace-status-request-repository request))
+                                                (lambda ()
+                                                  (let ((repository (%workspace-status-request-repository request))
+                                                        (token (%workspace-status-request-token request)))
+                                                    (sb-thread:with-recursive-lock (*workspace-catalog-generation-lock*)
+                                                      (when (%repository-data-generation-current-p repository token)
+                                                        (loop for worktree across (%workspace-status-request-worktrees request)
+                                                              do (nerimux/workspace-model:worktree-transition-status
+                                                                  worktree :loading))))
+                                                    (when on-start
+                                                      (funcall on-start repository)))))
                                                (setf stashes
                                                      (%repository-status-shared-stashes
                                                       (%workspace-status-request-repository request))))
@@ -470,7 +503,7 @@
                                                (nerimux/workspace-model:repository-specification
                                                  (%workspace-status-request-repository request))
                                                :condition (princ-to-string settlement-error)))
-                                     (fail-preparation-request request settlement-error))))))
+                                     (fail-preparation-request request settlement-error)))))))
                     )
                    (next-worktree-request ()
                      (sb-thread:wait-on-semaphore status-available)

@@ -80,15 +80,43 @@
        (and (worktree-head worktree) (plusp (length (worktree-head worktree)))))
     (list (list 0 (%workspace-status-head-label worktree) worktree :head))))
 
-(defun %workspace-status-loading-entries (worktree)
-  "One `loading…` row while WORKTREE's VCS status has not landed. Every file
-   section is empty until the first status pass writes a snapshot, and an
-   empty section is omitted, so without this row a worktree whose status is
-   still being read renders exactly like a clean one. The row carries
-   WORKTREE itself as its object, the way the Head row does, so a catalog
-   refresh landing while it is selected still resolves to a worktree."
-  (unless (worktree-status worktree)
-    (list (list 0 "loading…" worktree :loading))))
+(defun %workspace-status-state-entries (worktree)
+  "One status row per visible model outcome, followed by an independent
+   numstat failure row when change counts could not be read. Error rows carry
+   WORKTREE as their object so selection still resolves after a refresh."
+  (let ((state (worktree-status-state worktree)))
+    (append
+     (case state
+       (:loading
+        (list (list 0
+                    (if (worktree-status worktree)
+                        "Refreshing status…"
+                        "loading…")
+                    worktree
+                    :loading)))
+       (:read-error
+        (list (list 0
+                    (format nil "Status unavailable: ~A"
+                            (or (worktree-status-error-message worktree)
+                                "no details available"))
+                    worktree
+                    :status-error)))
+       (:stale
+        (list (list 0
+                    (format nil "Showing last successful status; refresh failed: ~A"
+                            (or (worktree-status-error-message worktree)
+                                "no details available"))
+                    worktree
+                    :status-error)))
+       (otherwise nil))
+     (when (eq (worktree-numstat-state worktree) :failed)
+       (list (list 0
+                   (format nil "Numstat unavailable: ~A"
+                           (or (worktree-numstat-error-message worktree)
+                               "no details available"))
+                   worktree
+                   :status-error))))))
+
 
 (defun %workspace-status-file-diff-child-entries (worktree-id path
                                                               code
@@ -163,12 +191,8 @@
          (t (%workspace-status-style-warn))))))
 
 (defun %workspace-status-stash-entries (worktree level)
-  "LEVEL entries for WORKTREE's stash group -- mirrors %WORKSPACE-WORKTREE-
-   COMMIT-CHILD-ENTRIES's :PENDING/:FAILED placeholder convention exactly
-   (renderer-workspace-tree.lisp). Stash messages are already control-
-   character-stripped at the source (LIST-WORKTREE-STASHES,
-   vcs-git-write.lisp, via %SANITIZE-RETAINED-TEXT) -- not re-stripped here,
-   which would just be the same trust boundary re-applied a second time."
+  "LEVEL entries for WORKTREE's stash group. Failed reads retain their reason
+   in an alert row while the section count and selection object stay stable."
   (case (worktree-stashes-state worktree)
     (:pending
      (list
@@ -179,9 +203,11 @@
     (:failed
      (list
       (list level
-            "stashes: UNKNOWN"
-            (list :stash (worktree-id worktree) :failed nil)
-            :stash)))
+            (format nil "Stashes unavailable: ~A"
+                    (or (worktree-stashes-error-message worktree)
+                        "no details available"))
+            worktree
+            :status-error)))
     (:ready
      (loop for (reference . message) in (worktree-stashes worktree)
            collect (list level
@@ -236,8 +262,9 @@
   "The status buffer rows for WORKTREE, flattened into (LEVEL LABEL OBJECT KIND)
    tuples. File objects carry their source section, in this fixed section
    order: Head, Unmerged, Untracked, Unstaged, Staged, Stashes, Recent commits,
-   Panes, Worktrees (contract §3). Empty sections are omitted. A worktree
-   whose status has not landed gets a loading row under Head."
+   Panes, Worktrees (contract §3). Empty sections are omitted. A loading row
+   appears only when WORKTREE status state is :loading; an :unloaded status
+   has no loading row."
   (let* ((level (or visibility-level 2))
          (section-default-p
           (%workspace-status-section-default-expanded-p level))
@@ -281,7 +308,7 @@
          (worktree-children
           (%workspace-status-sibling-worktree-entries worktree 1)))
     (append (%workspace-status-head-entries worktree)
-            (%workspace-status-loading-entries worktree)
+            (%workspace-status-state-entries worktree)
             (%workspace-status-section-entries :unmerged
                                                "Unmerged changes"
                                                (length

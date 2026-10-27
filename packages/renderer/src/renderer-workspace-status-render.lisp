@@ -108,6 +108,11 @@
             (cl-tui-kit/core:make-text-span label
                                             :style
                                             (%workspace-status-style-faint))))))
+    (:status-error
+     (list
+      (cl-tui-kit/core:make-text-span label
+                                      :style
+                                      (%workspace-status-style-alert))))
     (:pane
      (if (pane-process-exited-p object)
          (list
@@ -126,7 +131,8 @@
 (defun %workspace-status-row-spans (entry selected-object)
   (destructuring-bind (level label object kind) entry
     (let ((selected-p (%workspace-status-row-selected-p object selected-object))
-          (attention-p (%workspace-tree-node-attention-p object kind)))
+          (attention-p (or (%workspace-tree-node-attention-p object kind)
+                           (eq kind :status-error))))
       (append (%workspace-status-row-prefix-spans level selected-p attention-p)
               (%workspace-status-row-content-spans label object kind)))))
 

@@ -316,6 +316,20 @@ has learned nothing about which worktrees it has."
                                (%path-missing-p path)))))
         (dolist (pane (nerimux/workspace-model:worktree-panes worktree))
           (setf (nerimux/pane:pane-worktree pane) worktree))
+        (when old-worktree
+          (nerimux/workspace-model:worktree-transition-status
+           worktree
+           (nerimux/workspace-model:worktree-status-state old-worktree)
+           :snapshot (nerimux/workspace-model:worktree-status old-worktree)
+           :snapshot-supplied-p t
+           :error-message
+           (nerimux/workspace-model:worktree-status-error-message old-worktree))
+          (setf (nerimux/workspace-model:worktree-numstat-state worktree)
+                (nerimux/workspace-model:worktree-numstat-state old-worktree)
+                (nerimux/workspace-model:worktree-numstat-error-message worktree)
+                (nerimux/workspace-model:worktree-numstat-error-message old-worktree)
+                (nerimux/workspace-model:worktree-stashes-error-message worktree)
+                (nerimux/workspace-model:worktree-stashes-error-message old-worktree)))
         (nerimux/workspace-model:repository-add-worktree repository worktree)))
     (when bare-repository-p
       (setf (nerimux/workspace-model:repository-main-worktree repository) nil)

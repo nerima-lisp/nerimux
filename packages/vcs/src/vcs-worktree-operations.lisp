@@ -108,20 +108,29 @@
              (:constructor %make-worktree-status-update))
   (path nil :read-only t)
   (missing-p nil :read-only t)
-  (read-error-p nil :read-only t)
+  (status-state :ready :read-only t)
+  (status-error-message nil :read-only t)
   (snapshot nil :read-only t)
   (head nil :read-only t)
   (dirty-p nil :read-only t)
   (conflict-p nil :read-only t)
   (ahead nil :read-only t)
   (behind nil :read-only t)
-  (additions 0 :read-only t)
-  (deletions 0 :read-only t)
+  (numstat-state :unloaded :read-only t)
+  (numstat-error-message nil :read-only t)
+  (additions nil :read-only t)
+  (deletions nil :read-only t)
   (changed-files nil :read-only t)
-  ;; The (STATE . STASHES) pair the worker read beside the status, so it is
-  ;; accepted or discarded by the same generation check the rest of the capture
-  ;; passes through.
+  ;; The reading travels with the status capture so generation checks discard it
+  ;; with the snapshot it was read beside.
   (stashes nil :read-only t))
+
+(defstruct (%stash-reading
+             (:constructor %make-stash-reading
+                 (state entries &optional error-message)))
+  state
+  entries
+  error-message)
 
 (defun %status-entry-conflict-p (entry)
   (eq (vcs-kit:vcs-status-entry-kind entry) :unmerged))

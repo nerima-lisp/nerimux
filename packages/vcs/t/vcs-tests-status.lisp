@@ -1,4 +1,14 @@
 (in-package #:nerimux/test/vcs)
+(defun %vcs-test-numstat-count-values (&rest arguments)
+  (let ((result
+          (apply
+           (symbol-function
+            (find-symbol "%WORKTREE-STATUS-DIFF-LINE-COUNTS" :nerimux/vcs))
+           arguments)))
+    (unless (eq :ready (nerimux/vcs::%numstat-result-state result))
+      (error "Expected ready numstat result, got ~S" result))
+    (values (nerimux/vcs::%numstat-result-additions result)
+            (nerimux/vcs::%numstat-result-deletions result))))
 
 (describe "vcs worktree status split (magit alignment, Unit MODEL)"
           (it
@@ -227,6 +237,47 @@
                           (nerimux/workspace-model:worktree-additions worktree)))
                (expect (= 4
                           (nerimux/workspace-model:worktree-deletions worktree))))))
+          (it
+           "retains existing numstat counts on failure and applies the stash failure reason"
+           (let* ((path (namestring (host-kit:temporary-directory)))
+                  (repository
+                   (nerimux/workspace-model:make-repository
+                    :specification "workspace-owner/status-read-errors"
+                    :local-path path))
+                  (worktree
+                   (nerimux/workspace-model:make-worktree
+                    :repository repository :path path
+                    :additions 13 :deletions 5))
+                  (snapshot
+                   (vcs-kit::%make-vcs-status-snapshot
+                    :branch-head "head" :ahead 0 :behind 0 :entries nil))
+                  (numstat-reason "git diff exited 128: numstat denied")
+                  (stash-reason "git stash list exited 128: stash denied"))
+             (nerimux/workspace-model:repository-add-worktree repository worktree)
+             (nerimux/vcs::%apply-worktree-status
+              repository
+              (nerimux/vcs::%make-worktree-status-update
+               :path path :snapshot snapshot :head "head" :ahead 0 :behind 0
+               :numstat-state :failed :numstat-error-message numstat-reason
+               :additions nil :deletions nil
+               :stashes
+               (nerimux/vcs::%make-stash-reading :failed nil stash-reason)))
+             (expect
+              (eq :failed
+                  (nerimux/workspace-model:worktree-numstat-state worktree)))
+             (expect
+              (equal numstat-reason
+                     (nerimux/workspace-model:worktree-numstat-error-message
+                      worktree)))
+             (expect (= 13 (nerimux/workspace-model:worktree-additions worktree)))
+             (expect (= 5 (nerimux/workspace-model:worktree-deletions worktree)))
+             (expect
+              (eq :failed
+                  (nerimux/workspace-model:worktree-stashes-state worktree)))
+             (expect
+              (equal stash-reason
+                     (nerimux/workspace-model:worktree-stashes-error-message
+                      worktree)))))
           ;; Git's -<behind> field is signed in the porcelain stream, while
           ;; nerimux's worktree-behind value is a nonnegative count.
           (it
@@ -609,14 +660,59 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
       (expect (plusp (length (nerimux/vcs::%run-git-read
                               directory "rev-parse" "--git-dir"))))))
 
-  (it "signals %git-read-error carrying the exit code for a failing command"
+  (it "signals %git-read-error with stderr and a display reason for a failing command"
     (let ((directory (namestring (host-kit:temporary-directory)))
-          (signaled nil))
+          (exit-code nil)
+          (stderr nil)
+          (message nil))
       (handler-case
           (nerimux/vcs::%run-git-read directory "status" "--porcelain=v2")
         (nerimux/vcs::%git-read-error (condition)
-          (setf signaled (nerimux/vcs::%git-read-error-exit-code condition))))
-      (expect (eql 128 signaled))))
+          (setf exit-code (nerimux/vcs::%git-read-error-exit-code condition)
+                stderr (nerimux/vcs::%git-read-error-stderr condition)
+                message (nerimux/vcs::%git-read-error-message condition))))
+      (expect (eql 128 exit-code))
+      (expect (search "fatal:" stderr))
+      (expect (search "git status exited 128:" message))
+      (expect (search "fatal:" message))
+      (expect (<= (length stderr) nerimux/vcs::+status-error-message-max-length+))
+      (expect (<= (length message) nerimux/vcs::+status-error-message-max-length+))
+      (expect (every (lambda (character)
+                       (not (nerimux/text:control-character-p character)))
+                     stderr))
+      (expect (every (lambda (character)
+                       (not (nerimux/text:control-character-p character)))
+                     message))))
+  (it "keeps status read failure state and a sanitized bounded reason in its update"
+    (let* ((directory (namestring (host-kit:temporary-directory)))
+           (stderr
+             (format nil "fatal: unsafe~%second~C~A"
+                     #\Nul (make-string 500 :initial-element #\x)))
+           (failure
+             (make-condition
+              (find-symbol "%GIT-READ-ERROR" :nerimux/vcs)
+              :directory directory
+              :subcommand "status"
+              :arguments nil
+              :exit-code 128
+              :stderr stderr))
+           (update nil))
+      (with-stubbed-fdefinition
+          ((nerimux/vcs::%git-status-snapshot
+             (lambda (&rest arguments)
+               (declare (ignore arguments))
+               (error failure))))
+        (setf update
+              (nerimux/vcs::%read-worktree-status-at directory nil directory)))
+      (let ((reason
+              (nerimux/vcs::%worktree-status-update-status-error-message update)))
+        (expect (eq :read-error
+                    (nerimux/vcs::%worktree-status-update-status-state update)))
+        (expect (search "git status exited 128: fatal: unsafe second" reason))
+        (expect (<= (length reason) nerimux/vcs::+status-error-message-max-length+))
+        (expect (every (lambda (character)
+                         (not (nerimux/text:control-character-p character)))
+                       reason)))))
 
   (it "signals a git-read error when stdout exceeds its byte cap"
     (let* ((directory (%run-git-read-test-repo))
@@ -732,9 +828,9 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
                 (setf captured-paths paths)
                 (funcall original-numstat received-directory paths))))
           (multiple-value-setq (selected-additions selected-deletions)
-            (nerimux/vcs::%worktree-status-diff-line-counts directory entries)))
+            (%vcs-test-numstat-count-values directory entries)))
         (multiple-value-bind (full-additions full-deletions)
-            (nerimux/vcs::%worktree-status-diff-line-counts directory)
+            (%vcs-test-numstat-count-values directory)
           (expect
            (some (lambda (entry)
                    (eq :unmerged (vcs-kit:vcs-status-entry-kind entry)))
@@ -869,12 +965,12 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
                          received-directory subcommand arguments))))
             (handler-case
                 (multiple-value-setq (selected-additions selected-deletions)
-                  (nerimux/vcs::%worktree-status-diff-line-counts directory entries))
+                  (%vcs-test-numstat-count-values directory entries))
               (error (condition)
                 (error "selected line-count calculation failed: ~A" condition))))
           (multiple-value-bind (full-additions full-deletions)
               (handler-case
-                  (nerimux/vcs::%worktree-status-diff-line-counts directory)
+                  (%vcs-test-numstat-count-values directory)
                 (error (condition)
                   (error "full line-count calculation failed: ~A" condition)))
             (expect (search "ff6261642e74787400" tracked-path-hex))
@@ -928,9 +1024,9 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
                 (apply original-run-git-read
                        received-directory subcommand arguments))))
           (multiple-value-setq (selected-additions selected-deletions)
-            (nerimux/vcs::%worktree-status-diff-line-counts directory entries)))
+            (%vcs-test-numstat-count-values directory entries)))
         (multiple-value-bind (full-additions full-deletions)
-            (nerimux/vcs::%worktree-status-diff-line-counts directory)
+            (%vcs-test-numstat-count-values directory)
           (expect (= path-count (length entries)))
           (expect (equal (list "diff" "--numstat" "-z") captured-arguments))
           (expect (= path-count full-additions))
@@ -938,9 +1034,8 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
           (expect (= full-additions selected-additions))
           (expect (= full-deletions selected-deletions))))))
   (it
-    "logs numstat failures through the VCS diagnostic logger while returning zero counts"
-    (let* ((additions nil)
-           (deletions nil)
+    "returns typed numstat failure instead of treating it as zero counts"
+    (let* ((result nil)
            (log-output
              (with-output-to-string (stream)
                (let ((nerimux/vcs::*vcs-diagnostic-logger*
@@ -953,19 +1048,56 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
                         (lambda (&rest arguments)
                           (declare (ignore arguments))
                           (error "forced numstat failure"))))
-                   (multiple-value-setq (additions deletions)
-                     (nerimux/vcs::%worktree-status-diff-line-counts
-                      "/fixture"
-                      (list
-                       (vcs-kit::%make-vcs-status-entry
-                        :kind :ordinary
-                        :index-status "."
-                        :worktree-status "M"
-                        :path "tracked.txt")))))))))
+                   (setf result
+                         (nerimux/vcs::%worktree-status-diff-line-counts
+                          "/fixture"
+                          (list
+                           (vcs-kit::%make-vcs-status-entry
+                            :kind :ordinary
+                            :index-status "."
+                            :worktree-status "M"
+                            :path "tracked.txt")))))))))
       (expect (search "Git numstat failed in /fixture" log-output))
       (expect (search "forced numstat failure" log-output))
-      (expect (= 0 additions))
-      (expect (= 0 deletions)))))
+      (expect (typep result (find-symbol "%NUMSTAT-RESULT" :nerimux/vcs)))
+      (expect (eq :failed (nerimux/vcs::%numstat-result-state result)))
+      (expect (null (nerimux/vcs::%numstat-result-additions result)))
+      (expect (null (nerimux/vcs::%numstat-result-deletions result)))
+      (expect
+       (equal "forced numstat failure"
+              (nerimux/vcs::%numstat-result-error-message result)))))
+  (it
+    "returns typed numstat failure when diagnostics signal"
+    (let ((result nil)
+          (logged-p nil))
+      (sb-ext:without-package-locks
+        (with-stubbed-fdefinition
+            ((nerimux/vcs::%git-numstat-entries
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 (error "forced numstat failure")))
+             (log-kit:emit-log
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 (setf logged-p t)
+                 (error "forced logger failure"))))
+          (setf result
+                (nerimux/vcs::%worktree-status-diff-line-counts
+                 "/fixture"
+                 (list
+                  (vcs-kit::%make-vcs-status-entry
+                   :kind :ordinary
+                   :index-status "."
+                   :worktree-status "M"
+                   :path "tracked.txt"))))))
+      (expect logged-p)
+      (expect (typep result (find-symbol "%NUMSTAT-RESULT" :nerimux/vcs)))
+      (expect (eq :failed (nerimux/vcs::%numstat-result-state result)))
+      (expect (null (nerimux/vcs::%numstat-result-additions result)))
+      (expect (null (nerimux/vcs::%numstat-result-deletions result)))
+      (expect
+       (equal "forced numstat failure"
+              (nerimux/vcs::%numstat-result-error-message result))))))
 (describe "vcs numstat fallback diagnostic logging"
   (it "records one non-TUI log entry for each unfiltered fallback"
     (let* ((commands nil)
@@ -1005,4 +1137,57 @@ since -- %READ-WORKTREE-STATUS-AT's end-to-end fixture."
                                    :start2 (1+ limit-position)))))
         (expect (equal '(("diff" "--numstat" "-z")
                          ("diff" "--numstat" "-z")) (reverse commands)))))))
+(describe "vcs repository worktree state preservation"
+  (it "preserves cached status and failure reasons while rebuilding worktrees"
+    (let* ((path (namestring (host-kit:temporary-directory)))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/state-copy" :local-path path))
+           (snapshot
+             (vcs-kit::%make-vcs-status-snapshot
+              :branch-head "cached-head" :ahead 1 :behind -1 :entries nil))
+           (status-reason "git status exited 128: repository unavailable")
+           (numstat-reason "git diff exited 128: numstat unavailable")
+           (stashes-reason "git stash list exited 128: stash unavailable")
+           (old-worktree
+             (nerimux/workspace-model:make-worktree
+              :repository repository :path path :branch "main" :head "old-head"
+              :status snapshot :status-state :stale
+              :status-error-message status-reason
+              :additions 13 :deletions 5
+              :numstat-state :failed :numstat-error-message numstat-reason
+              :stashes nil :stashes-state :failed
+              :stashes-error-message stashes-reason)))
+      (nerimux/workspace-model:repository-add-worktree repository old-worktree)
+      (nerimux/vcs::%apply-repository-worktrees
+       repository
+       (list
+        (vcs-kit::%make-vcs-worktree
+         :path path :branch "main" :head "fresh-head"))
+       nil)
+      (let ((worktree
+              (car
+               (nerimux/workspace-model:repository-worktrees repository))))
+        (expect (eq :stale
+                    (nerimux/workspace-model:worktree-status-state worktree)))
+        (expect (eq snapshot
+                    (nerimux/workspace-model:worktree-status worktree)))
+        (expect (nerimux/workspace-model:worktree-read-error-p worktree))
+        (expect (equal status-reason
+                       (nerimux/workspace-model:worktree-status-error-message
+                        worktree)))
+        (expect (eq :failed
+                    (nerimux/workspace-model:worktree-numstat-state worktree)))
+        (expect (equal numstat-reason
+                       (nerimux/workspace-model:worktree-numstat-error-message
+                        worktree)))
+        (expect (= 13 (nerimux/workspace-model:worktree-additions worktree)))
+        (expect (= 5 (nerimux/workspace-model:worktree-deletions worktree)))
+        (expect (eq :failed
+                    (nerimux/workspace-model:worktree-stashes-state worktree)))
+        (expect (equal stashes-reason
+                       (nerimux/workspace-model:worktree-stashes-error-message
+                        worktree)))
+        (expect (equal "fresh-head"
+                       (nerimux/workspace-model:worktree-head worktree)))))))
 

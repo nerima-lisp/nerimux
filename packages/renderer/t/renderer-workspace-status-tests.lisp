@@ -3,6 +3,10 @@
 (defun %build-status-fixture (&key (branch "feature/status")
                                    head
                                    (status :landed)
+                                   status-state
+                                   status-error-message
+                                   (numstat-state :unloaded)
+                                   numstat-error-message
                                    ahead
                                    behind
                                    unmerged
@@ -11,6 +15,7 @@
                                    staged
                                    stashes
                                    stashes-state
+                                   stashes-error-message
                                    commits
                                    commits-state
                                    panes
@@ -23,7 +28,7 @@
    (VALUES WORKTREE REPOSITORY SIBLING-OR-NIL). STATUS stands in for the
    snapshot the status pass writes: non-NIL by default, since every section
    assertion here is about a worktree whose status has already landed, and
-   NIL for the not-yet-read state that shows the `loading…` row instead."
+   NIL for the not-yet-read state."
   (let* ((worktree
           (nerimux/workspace-model:make-worktree :id
                                                  "wt-status"
@@ -35,6 +40,15 @@
                                                  head
                                                  :status
                                                  status
+                                                 :status-state
+                                                 (or status-state
+                                                     (if status :ready :loading))
+                                                 :status-error-message
+                                                 status-error-message
+                                                 :numstat-state
+                                                 numstat-state
+                                                 :numstat-error-message
+                                                 numstat-error-message
                                                  :ahead
                                                  (or ahead 0)
                                                  :behind
@@ -51,6 +65,8 @@
                                                  stashes
                                                  :stashes-state
                                                  stashes-state
+                                                 :stashes-error-message
+                                                 stashes-error-message
                                                  :recent-commits
                                                  commits
                                                  :commits-state
@@ -116,16 +132,76 @@
       (let ((entries (nerimux/renderer:workspace-status-entries worktree)))
         (expect (equal '(:head) (%status-entry-kinds entries))))))
 
-  (it "shows a loading row instead of a clean tree until the status lands"
+  (it "shows a loading row only while the model status is loading"
     (multiple-value-bind (worktree) (%build-status-fixture :status nil)
       (let ((entries (nerimux/renderer:workspace-status-entries worktree)))
         (expect (equal '(:head :loading) (%status-entry-kinds entries)))
         (expect (search "loading" (second (second entries))))
-        (expect (eq worktree (third (second entries)))))))
+        (expect (eq worktree (third (second entries))))))
+    (multiple-value-bind (worktree)
+        (%build-status-fixture :status nil :status-state :unloaded)
+      (expect (not (find :loading
+                         (nerimux/renderer:workspace-status-entries worktree)
+                         :key #'fourth)))))
 
   (it "drops Head entirely for a worktree with neither a branch nor a HEAD"
     (multiple-value-bind (worktree) (%build-status-fixture :branch nil)
       (expect (null (nerimux/renderer:workspace-status-entries worktree)))))
+
+  (it "shows a read error reason without a loading row and keeps it selectable as the worktree"
+    (multiple-value-bind (worktree)
+        (%build-status-fixture :status nil
+                               :status-state :read-error
+                               :status-error-message "git status exited 128: invalid path")
+      (let* ((entries (nerimux/renderer:workspace-status-entries worktree))
+             (error-row (find :status-error entries :key #'fourth))
+             (objects (nerimux/renderer:workspace-status-objects worktree))
+             (row-index (position error-row entries)))
+        (expect (equal '(:head :status-error) (%status-entry-kinds entries)))
+        (expect (not (find :loading entries :key #'fourth)))
+        (expect (equal "Status unavailable: git status exited 128: invalid path"
+                       (second error-row)))
+        (expect (not (find #\Newline (second error-row))))
+        (expect (not (find #\Return (second error-row))))
+        (expect (not (find (code-char 27) (second error-row))))
+        (expect (eq worktree (third error-row)))
+        (expect (eq worktree (nth row-index objects)))
+        (let ((spans (nerimux/renderer::%workspace-status-row-spans
+                      error-row worktree)))
+          (expect (equal ">" (cl-tui-kit/core:text-span-text (second spans))))
+          (expect (equal "!" (cl-tui-kit/core:text-span-text (third spans)))))
+        (let ((output
+                (nerimux/renderer:render-workspace-status-to-tui-string
+                 worktree 24 80 :selected-object worktree)))
+          (expect output :to-contain-sgr
+                  (%expected-sgr-params
+                   (nerimux/renderer::%workspace-status-style-alert)))))))
+
+  (it "keeps the last successful files visible and explains a stale status"
+    (multiple-value-bind (worktree)
+        (%build-status-fixture :status-state :stale
+                               :status-error-message "git status exited 128"
+                               :unstaged '(("M" . "last-good.txt")))
+      (let* ((entries (nerimux/renderer:workspace-status-entries worktree))
+             (error-row (find :status-error entries :key #'fourth))
+             (file-row (find :file entries :key #'fourth)))
+        (expect (equal '(:head :status-error :section :file)
+                       (%status-entry-kinds entries)))
+        (expect (equal "Showing last successful status; refresh failed: git status exited 128"
+                       (second error-row)))
+        (expect (eq worktree (third error-row)))
+        (expect (search "last-good.txt" (second file-row))))))
+
+  (it "keeps the last successful files visible while a refresh is in progress"
+    (multiple-value-bind (worktree)
+        (%build-status-fixture :status-state :loading
+                               :unstaged '(("M" . "last-good.txt")))
+      (let* ((entries (nerimux/renderer:workspace-status-entries worktree))
+             (loading-row (find :loading entries :key #'fourth))
+             (file-row (find :file entries :key #'fourth)))
+        (expect (search "Refreshing status" (second loading-row)))
+        (expect (search "last-good.txt" (second file-row)))
+        (expect (not (find :status-error entries :key #'fourth))))))
 
   (it "carries a live count in each section header, including a pending placeholder"
     (multiple-value-bind (worktree)
@@ -139,6 +215,29 @@
         (expect (find-if (lambda (e) (search "Staged changes (1)" (second e))) headers))
         (expect (find-if (lambda (e) (search "Stashes (1)" (second e))) headers))
         (expect (find-if (lambda (e) (search "stashes: refreshing..." (second e))) entries)))))
+
+  (it "shows a numstat failure reason"
+    (multiple-value-bind (worktree)
+        (%build-status-fixture :numstat-state :failed
+                               :numstat-error-message "git diff --numstat exited 128")
+      (let* ((entries (nerimux/renderer:workspace-status-entries worktree))
+             (error-row (find :status-error entries :key #'fourth)))
+        (expect (equal "Numstat unavailable: git diff --numstat exited 128"
+                       (second error-row)))
+        (expect (eq worktree (third error-row))))))
+
+  (it "shows a stash failure reason instead of UNKNOWN"
+    (multiple-value-bind (worktree)
+        (%build-status-fixture :stashes-state :failed
+                               :stashes-error-message "git stash list exited 1")
+      (let* ((entries (nerimux/renderer:workspace-status-entries worktree))
+             (section (find :stashes entries :key #'third))
+             (error-row (find :status-error entries :key #'fourth)))
+        (expect (search "Stashes (1)" (second section)))
+        (expect (equal "Stashes unavailable: git stash list exited 1"
+                       (second error-row)))
+        (expect (eq worktree (third error-row)))
+        (expect (not (search "UNKNOWN" (second error-row)))))))
 
   (it "status view labels preserve raw codes and source sections"
     (multiple-value-bind (worktree)
