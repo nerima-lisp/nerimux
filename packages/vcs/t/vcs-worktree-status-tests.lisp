@@ -113,9 +113,8 @@
               (expect (not (find control
                                  (nerimux/workspace-model:worktree-status-error-message
                                   worktree)))))
-            (expect logged-p)))))
-
-  (it "keeps the last successful snapshot as stale after a status read error"
+            (expect logged-p))))))
+ (it "keeps the last successful snapshot as stale after a status read error"
     (let* ((path (namestring (host-kit:temporary-directory)))
            (snapshot
              (vcs-kit::%make-vcs-status-snapshot
@@ -144,8 +143,7 @@
                      (nerimux/workspace-model:worktree-changed-files worktree)))
       (expect (= 5 (nerimux/workspace-model:worktree-additions worktree)))
       (expect (= 3 (nerimux/workspace-model:worktree-deletions worktree)))))
-
-  (it "retains typed numstat failure and its reason without replacing counts with zero"
+ (it "retains typed numstat failure and its reason without replacing counts with zero"
     (let* ((path (namestring (host-kit:temporary-directory)))
            (repository
              (nerimux/workspace-model:make-repository
@@ -188,8 +186,7 @@
                           worktree)))
           (expect (= 5 (nerimux/workspace-model:worktree-additions worktree)))
           (expect (= 2 (nerimux/workspace-model:worktree-deletions worktree)))))))
-
-  (it "retains the stash failure reason on the worktree"
+ (it "retains the stash failure reason on the worktree"
     (let* ((path (namestring (host-kit:temporary-directory)))
            (repository
              (nerimux/workspace-model:make-repository
@@ -224,7 +221,7 @@
                          (nerimux/workspace-model:worktree-stashes-error-message
                           worktree)))
           (expect (null (nerimux/workspace-model:worktree-stashes worktree)))))))
-  (it "applies the stash failure when status reading also fails"
+ (it "applies the stash failure when status reading also fails"
     (let* ((path (namestring (host-kit:temporary-directory)))
            (repository
              (nerimux/workspace-model:make-repository
@@ -285,4 +282,4 @@
         (expect
          (equal "forced stash failure"
                 (nerimux/workspace-model:worktree-stashes-error-message worktree)))
-        (expect (null (nerimux/workspace-model:worktree-stashes worktree))))))))
+        (expect (null (nerimux/workspace-model:worktree-stashes worktree)))))))
