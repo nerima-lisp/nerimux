@@ -15,21 +15,32 @@
       (when sock
         (%add-client sock)))))
 
-(defun %read-and-dispatch-client-message (session conn)
-  "Read one frame from CONN and dispatch it via %handle-multi-client-message.
-   End-of-stream is returned as :eof so the server does not write a goodbye
-   frame to a peer that has already closed.  Other read/decode errors are
-   treated as a disconnect (:drop) so one malformed client cannot take down
-   the multi-client event loop."
-  (with-loop-safe-error (nil :on-error :drop)
-                        (multiple-value-bind (type payload) 
-                            (read-frame (client-conn-stream conn))
-                          (if type
-                              (%handle-multi-client-message type
-                                                            payload
-                                                            session
-                                                            conn)
-                              :eof))))
+(defun %read-and-dispatch-client-message (session conn &key (max-bytes 65536))
+  "Read one incremental frame and return disposition, status, and bytes consumed."
+  (with-loop-safe-error (nil :on-error (values :drop :error 0))
+    (let* ((reader (client-conn-frame-reader conn))
+           (before (nerimux/transport::frame-reader-offset reader)))
+      (multiple-value-bind (type payload status)
+          (nerimux/transport:read-frame-ready
+           reader (client-conn-socket conn) :max-bytes max-bytes)
+        (let ((bytes-read
+                (case status
+                  (:frame
+                   (- (+ nerimux/protocol:+header-size+ (length payload))
+                      before))
+                  (:pending
+                   (- (nerimux/transport::frame-reader-offset reader) before))
+                  (otherwise 0))))
+          (case status
+            (:frame
+             (values (%handle-multi-client-message type payload session conn)
+                     :frame
+                     bytes-read))
+            (:eof (values :eof :eof 0))
+            (:pending (values nil :pending bytes-read))
+            (:would-block (values nil :would-block 0))
+            (otherwise
+             (error "Unexpected frame reader status ~S" status))))))))
 
 (defun %apply-client-disposition (disposition conn)
   "Act on DISPOSITION (the result of dispatching CONN's message): drop CONN on
@@ -42,54 +53,79 @@
     (:drop (%drop-client conn :bye t) nil)))
 
 (defun %dispatch-buffered-client-messages (session conn)
-  "Dispatch the message select reported for CONN, then keep dispatching while
-   CONN's stream still holds buffered input.  One read(2) can slurp several
-   protocol frames into the Lisp stream's buffer, the client sends
-   msg-attach and its attach-target command back-to-back, and they usually
-   coalesce into one segment, after which the raw fd is no longer readable,
-   so select alone would leave the buffered tail unread until some later
-   keystroke arrived.  Returns :quit when a disposition ends the session."
-  (loop
-    (let ((disposition (%read-and-dispatch-client-message session conn)))
-      (when (eq :quit (%apply-client-disposition disposition conn))
-        (return :quit))
-      (when (member disposition '(:drop :eof))
-        (return nil))
-      (unless (handler-case (listen (client-conn-stream conn))
-                (stream-error () nil))
-        (return nil)))))
+  "Dispatch ready frames up to 64 KiB or 16 complete frames for this client."
+  (loop with bytes-read = 0
+        with complete-frames = 0
+        while (and (< bytes-read 65536)
+                   (< complete-frames 16))
+        do (multiple-value-bind (disposition status received)
+               (%read-and-dispatch-client-message
+                session conn :max-bytes (- 65536 bytes-read))
+             (incf bytes-read received)
+             (case status
+               (:frame
+                (incf complete-frames)
+                (let ((result (%apply-client-disposition disposition conn)))
+                  (when (eq :quit result)
+                    (return :quit))
+                  (when (or (member disposition (list :drop :eof))
+                            (not (member conn *clients* :test #'eq))
+                            (client-conn-close-after-write-p conn))
+                    (return nil))))
+               (:eof
+                (%apply-client-disposition :eof conn)
+                (return nil))
+               (:error
+                (%apply-client-disposition disposition conn)
+                (return nil))
+               (otherwise
+                (return nil))))))
 
 (defun %dispatch-ready-clients (session ready)
-  "Read + dispatch pending messages from every client whose fd is in READY.
-   Returns :quit as soon as any client's disposition ends the session, else NIL
-   once every ready client has been served."
-  (loop for conn in (copy-list *clients*)
-        when (member (client-conn-fd conn) ready)
-          do (when (eq :quit (%dispatch-buffered-client-messages session conn))
-               (return :quit))))
+  "Dispatch ready clients in a rotating order, each under its read quota."
+  (let* ((ordered
+           (%rotate-client-order (copy-list *clients*)
+                                 *client-read-round-robin-cursor*))
+         (ready-clients
+           (remove-if-not
+            (lambda (conn) (member (client-conn-fd conn) ready))
+            ordered)))
+    (when ready-clients
+      (setf *client-read-round-robin-cursor* (first ready-clients)))
+    (loop for conn in ready-clients
+          when (member conn *clients* :test #'eq)
+            do (when (eq :quit
+                         (%dispatch-buffered-client-messages session conn))
+                 (return :quit)))))
 
 (defun %multi-serve-iteration (listener session)
-  "One iteration of the multi-client server loop: broadcast a dirty frame, then
-   select on the listener fd + every client fd; accept a new connection when the
-   listener is readable, and dispatch a message from each readable client.
-   Returns :quit when the session must end, else NIL.  Factored out (taking the
-   listener + session, mutating *clients*) so the dispatch/teardown logic is
-   unit-testable without driving a full process loop."
-  (%drain-main-thread-callbacks)
+  "Poll input first, service bounded ready work, then run maintenance and renders."
   (when *server-termination-requested-p*
     (setf *running* nil)
     (return-from %multi-serve-iteration :quit))
-  (%workspace-job-tick)
-  (%persist-runtime-state session)
-  (%broadcast-frame session)
   (let* ((listener-fd (socket-fd listener))
-         (ready (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+))
-         (disposition
-           (when ready
-             (%accept-pending-connection listener listener-fd ready)
-             (%dispatch-ready-clients session ready))))
-    (%flush-client-output)
-    disposition))
+         (previously-pending
+           (remove-if-not #'%client-output-pending-p (copy-list *clients*)))
+         (read-fds (cons listener-fd (%client-fds)))
+         (write-fds (%client-write-fds))
+         (timeout-us (%next-client-render-timeout-us
+                      (get-internal-real-time))))
+    (multiple-value-bind (read-ready write-ready)
+        (select-fds read-fds timeout-us :write-fds write-fds)
+      (%accept-pending-connection listener listener-fd read-ready)
+      (let ((disposition (%dispatch-ready-clients session read-ready)))
+        (%queue-session-control-output session)
+        (%flush-ready-client-output write-ready previously-pending)
+        (when (eq :quit disposition)
+          (return-from %multi-serve-iteration :quit))
+        (%drain-main-thread-callbacks)
+        (when *server-termination-requested-p*
+          (setf *running* nil)
+          (return-from %multi-serve-iteration :quit))
+        (%workspace-job-tick)
+        (%persist-runtime-state session)
+        (%schedule-client-render-frames session)
+        nil))))
 
 (defun %run-multi-server-loop (listener session)
   "Drive %MULTI-SERVE-ITERATION until *RUNNING* clears or a command ends the

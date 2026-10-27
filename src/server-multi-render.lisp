@@ -586,34 +586,99 @@
                               frame
                               (client-conn-row-frame-candidate conn)))
 
-(defun %broadcast-frame (session)
-  "Render dirty content and enqueue one shared notification drain."
-  (when *clients*
-    (let ((dirty (or *dirty* (some #'%client-message-expired-p *clients*)))
-          (notifications (%drain-session-notifications session)))
-      (%notify-agent-waiting-hosts session)
-      (when (or dirty notifications)
+(progn
+  (defun %client-render-interval-ticks ()
+    (ceiling internal-time-units-per-second 30))
+
+  (defun %client-render-deadline (conn)
+    (let ((last (client-conn-last-render-at conn)))
+      (and last (+ last (%client-render-interval-ticks)))))
+
+  (defun %next-client-render-timeout-us (now)
+    (let ((nearest nil))
+      (dolist (conn *clients*)
+        (when (and (not (client-conn-close-after-write-p conn))
+                   (or *dirty*
+                       (client-conn-render-dirty-p conn)
+                       (%client-message-expired-p conn)))
+          (let ((deadline (or (%client-render-deadline conn) now)))
+            (setf nearest (if nearest (min nearest deadline) deadline)))))
+      (if nearest
+          (min +poll-timeout-us+
+               (max 0
+                    (ceiling (* (- nearest now) 1000000)
+                             internal-time-units-per-second)))
+          +poll-timeout-us+)))
+
+  (defun %schedule-client-render-frames (session &optional
+                                                  (now (get-internal-real-time)))
+    (when *clients*
+      (when (or *dirty* (some #'%client-message-expired-p *clients*))
         (setf *dirty* nil)
-        (dolist (conn (copy-list *clients*))
-          (unless (client-conn-close-after-write-p conn)
-            (with-loop-safe-error (nil :on-error (%drop-client conn))
-              (block client-output
+        (dolist (conn *clients*)
+          (setf (client-conn-render-dirty-p conn) t)))
+      (dolist (conn (copy-list *clients*))
+        (when (and (not (client-conn-close-after-write-p conn))
+                   (client-conn-render-dirty-p conn)
+                   (or (null (%client-render-deadline conn))
+                       (>= now (%client-render-deadline conn))))
+          (with-loop-safe-error (nil :on-error (%drop-client conn))
+            (%send-client-frame conn (%render-client-frame session conn))
+            (when (member conn *clients* :test #'eq)
+              (setf (client-conn-render-dirty-p conn) nil
+                    (client-conn-last-render-at conn) now))))))
+    nil)
+
+  (defun %queue-session-control-output (session)
+    (when *clients*
+      (let ((notifications (%drain-session-notifications session)))
+        (%notify-agent-waiting-hosts session)
+        (when notifications
+          (dolist (conn (copy-list *clients*))
+            (unless (client-conn-close-after-write-p conn)
+              (with-loop-safe-error (nil :on-error (%drop-client conn))
                 (dolist (raw-sequence notifications)
                   (unless (eq :queued
                               (%queue-client-control-frame
                                conn
                                (msg-notification raw-sequence)))
-                    (return-from client-output nil)))
-                (when dirty
-                  (%send-client-frame
-                   conn
-                   (%render-client-frame session conn)))))))))))
+                    (return)))))))))
+    nil)
 
-(defun %client-fds ()
-  "Return socket fds for clients still accepting input."
-  (loop for conn in *clients*
-        unless (client-conn-close-after-write-p conn)
-          collect (client-conn-fd conn)))
+  (defun %broadcast-frame (session)
+    (%queue-session-control-output session)
+    (%schedule-client-render-frames session)))
+
+(progn
+  (defun %client-fds ()
+    "Return socket fds for clients still accepting input."
+    (loop for conn in *clients*
+          unless (client-conn-close-after-write-p conn)
+            collect (client-conn-fd conn)))
+
+  (defun %client-write-fds ()
+    "Return fds only for clients whose single writer has queued output."
+    (loop for conn in *clients*
+          when (%client-output-pending-p conn)
+            collect (client-conn-fd conn)))
+
+  (defun %flush-ready-client-output (write-ready previously-pending)
+    "Advance each ready writer once, plus new control output queued after select."
+    (let* ((ordered
+             (%rotate-client-order (copy-list *clients*)
+                                   *client-write-round-robin-cursor*))
+           (eligible
+             (remove-if-not
+              (lambda (conn)
+                (and (%client-output-pending-p conn)
+                     (or (member (client-conn-fd conn) write-ready)
+                         (not (member conn previously-pending :test #'eq)))))
+              ordered)))
+      (when eligible
+        (setf *client-write-round-robin-cursor* (first eligible)))
+      (dolist (conn eligible)
+        (%advance-client-output conn :max-bytes 65536)))
+    nil))
 
 (defun %start-client-output-frame (conn)
   (let ((writer (client-conn-frame-writer conn)))

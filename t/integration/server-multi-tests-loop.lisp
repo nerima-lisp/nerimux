@@ -67,41 +67,82 @@
                 (let ((ready (list (nerimux::client-conn-fd conn))))
                   (expect (null (nerimux::%dispatch-ready-clients s ready)))
                   (expect (null nerimux::*clients*)))))))))) (it "dispatch-buffered-client-messages-stops-on-quit"
+  (let ((conn (%make-test-conn)))
+    (with-stubbed-fdefinition
+        ((nerimux::%read-and-dispatch-client-message
+          (lambda (session client &key max-bytes)
+            (declare (ignore session client max-bytes))
+            (values :quit :frame 5))))
+      (expect (eq :quit
+                  (nerimux::%dispatch-buffered-client-messages
+                   :session conn)))))) (it "dispatch-buffered-client-messages-stops-on-would-block"
     (let ((conn (%make-test-conn)))
       (with-stubbed-fdefinition
           ((nerimux::%read-and-dispatch-client-message
-            (lambda (session client)
-              (declare (ignore session client))
-              :quit)))
-        (expect (eq :quit
-                    (nerimux::%dispatch-buffered-client-messages
-                     :session conn)))))) (it "dispatch-buffered-client-messages-stops-when-stream-has-no-buffered-input"
-    (let ((conn (%make-test-conn)))
-      (with-stubbed-fdefinition
-          ((nerimux::%read-and-dispatch-client-message
-            (lambda (session client)
-              (declare (ignore session client))
-              :handled)))
+            (lambda (session client &key max-bytes)
+              (declare (ignore session client max-bytes))
+              (values nil :would-block 0))))
         (expect (null
                  (nerimux::%dispatch-buffered-client-messages
-                  :session conn)))))) (it "dispatch-buffered-client-messages-continues-while-listen-reports-buffered-input"
-    (let ((conn (%make-test-conn))
-          (reads 0))
-      (sb-ext:without-package-locks
-        (with-stubbed-fdefinition
-            ((nerimux::%read-and-dispatch-client-message
-              (lambda (session client)
-                (declare (ignore session client))
-                (incf reads)
-                (if (= reads 1) :handled :quit)))
-             (listen
-              (lambda (stream)
-                (declare (ignore stream))
-                (= reads 1))))
-          (expect (eq :quit
-                      (nerimux::%dispatch-buffered-client-messages
-                       :session conn)))))
-      (expect (= 2 reads)))) (it "dispatch-ready-clients-returns-quit-when-a-client-requests-shutdown"
+                  :session conn)))))) (it "dispatch-ready-clients-round-robins-with-frame-and-byte-quotas"
+  (let* ((conn-a (%make-test-conn))
+         (conn-b (%make-test-conn))
+         (counts (make-hash-table :test #'eq))
+         (round-first nil)
+         (nerimux::*clients* (list conn-a conn-b))
+         (nerimux::*client-read-round-robin-cursor* nil))
+    (setf (nerimux::client-conn-fd conn-a) 8
+          (nerimux::client-conn-fd conn-b) 9
+          (nerimux::client-conn-socket conn-a) :a
+          (nerimux::client-conn-socket conn-b) :b)
+    (with-stubbed-fdefinition
+        ((nerimux/transport:read-frame-ready
+          (lambda (reader socket &key max-bytes)
+            (declare (ignore reader max-bytes))
+            (let ((count (incf (gethash socket counts 0))))
+              (when (member count (list 1 17))
+                (push socket round-first))
+              (values 1 #() :frame))))
+         (nerimux::%handle-multi-client-message
+          (lambda (type payload session conn)
+            (declare (ignore type payload session conn)))))
+      (expect (null (nerimux::%dispatch-ready-clients :session (list 8 9))))
+      (expect (= 16 (gethash :a counts 0)))
+      (expect (= 16 (gethash :b counts 0)))
+      (expect (equal (list :a :b) (nreverse round-first)))
+      (setf round-first nil)
+      (expect (null (nerimux::%dispatch-ready-clients :session (list 8 9))))
+      (expect (equal (list :b :a) (nreverse round-first))))
+    (let* ((conn (%make-test-conn))
+           (budgets nil)
+           (nerimux::*clients* (list conn))
+           (nerimux::*client-read-round-robin-cursor* nil))
+      (setf (nerimux::client-conn-fd conn) 10
+            (nerimux::client-conn-socket conn) :byte-client)
+      (with-stubbed-fdefinition
+          ((nerimux/transport:read-frame-ready
+            (lambda (reader socket &key max-bytes)
+              (declare (ignore socket))
+              (push max-bytes budgets)
+              (if (= (length budgets) 1)
+                  (values 1 (make-array 50000
+                                        :element-type '(unsigned-byte 8))
+                          :frame)
+                  (progn
+                    (setf (nerimux/transport::frame-reader-offset reader)
+                          max-bytes)
+                    (values nil nil :pending)))))
+           (nerimux::%handle-multi-client-message
+            (lambda (type payload session client)
+              (declare (ignore type payload session client)))))
+        (expect
+         (null
+          (nerimux::%dispatch-ready-clients :session (list 10))))
+        (expect (equal (list 65536 15531) (nreverse budgets)))
+        (expect
+         (= 15531
+            (nerimux/transport::frame-reader-offset
+             (nerimux::client-conn-frame-reader conn)))))))) (it "dispatch-ready-clients-returns-quit-when-a-client-requests-shutdown"
     (let* ((conn (%make-test-conn))
            (nerimux::*clients* (list conn)))
       (setf (nerimux::client-conn-fd conn) 4242)
@@ -111,59 +152,111 @@
               (declare (ignore session client))
               :quit)))
         (expect (eq :quit
-                    (nerimux::%dispatch-ready-clients :session '(4242))))))) (it "dispatch-buffered-client-messages-treats-listen-error-as-no-buffered-input"
-    (let* ((conn (%make-test-conn))
-           (stream (make-string-input-stream "")))
-      (close stream)
-      (setf (nerimux::client-conn-stream conn) stream)
+                    (nerimux::%dispatch-ready-clients :session '(4242))))))) (it "dispatch-buffered-client-messages-stops-on-pending-input"
+    (let* ((conn (%make-test-conn)))
       (with-stubbed-fdefinition
           ((nerimux::%read-and-dispatch-client-message
-            (lambda (session client)
-              (declare (ignore session client))
-              :handled)))
+            (lambda (session client &key max-bytes)
+              (declare (ignore session client max-bytes))
+              (values nil :pending 5))))
         (expect (null
                  (nerimux::%dispatch-buffered-client-messages
-                  :session conn)))))) (it "multi-serve-iteration-dispatches-ready-listener-and-client"
-    (let ((events nil))
-      (with-stubbed-fdefinition
-          ((nerimux::%drain-main-thread-callbacks (lambda () nil))
-           (nerimux::%broadcast-frame (lambda (session) (declare (ignore session))))
-           (nerimux/net::socket-fd (lambda (listener) (declare (ignore listener)) 7))
-           (nerimux::%client-fds (lambda () (list 8)))
-           (nerimux/pty::select-fds
-            (lambda (fds timeout)
-              (declare (ignore timeout))
-              (push (list :select fds) events)
-              (list 7 8)))
-           (nerimux::%accept-pending-connection
-            (lambda (listener fd ready)
-              (declare (ignore listener fd ready))
-              (push :accept events)
-              nil))
-           (nerimux::%dispatch-ready-clients
-            (lambda (session ready)
-              (declare (ignore session ready))
-              (push :dispatch events)
-              nil)))
-        (expect (null (nerimux::%multi-serve-iteration :listener :session)))
-        (expect (equal '(:dispatch :accept (:select (7 8))) events))))) (it "multi-serve-iteration-returns-nil-when-select-has-no-ready-fds"
-    (let ((events nil))
-      (with-stubbed-fdefinition
-          ((nerimux::%drain-main-thread-callbacks
-            (lambda () (push :drain events)))
-           (nerimux::%broadcast-frame
-            (lambda (session) (push (list :broadcast session) events)))
-           (nerimux/net::socket-fd
-            (lambda (listener) (declare (ignore listener)) 7))
-           (nerimux/pty::select-fds
-            (lambda (fds timeout)
-              (push (list :select fds timeout) events)
-              nil)))
-        (expect (null (nerimux::%multi-serve-iteration :listener :session)))
-        (expect (equal '((:select (7) 50000)
-                         (:broadcast :session)
-                         :drain)
-                       events))))) (it "run-multi-server-loop-stops-on-quit-and-drops-all-clients"
+                  :session conn)))))) (it "multi-serve-iteration-dispatches-input-before-output"
+  (let* ((conn (%make-test-conn))
+         (events nil)
+         (reader-calls 0)
+         (nerimux::*clients* (list conn))
+         (nerimux::*dirty* nil)
+         (nerimux::*server-termination-requested-p* nil)
+         (nerimux::*client-read-round-robin-cursor* nil)
+         (nerimux::*client-write-round-robin-cursor* nil))
+    (setf (nerimux::client-conn-fd conn) 8
+          (nerimux::client-conn-socket conn) :client)
+    (nerimux::%queue-client-control-frame
+     conn (nerimux/protocol:msg-reply "pending"))
+    (with-stubbed-fdefinition
+        ((nerimux::%drain-main-thread-callbacks
+          (lambda () (push :callbacks events)))
+         (nerimux::%workspace-job-tick
+          (lambda () (push :jobs events)))
+         (nerimux::%persist-runtime-state
+          (lambda (session) (declare (ignore session))
+            (push :persist events)))
+         (nerimux::%schedule-client-render-frames
+          (lambda (session &optional now)
+            (declare (ignore session now))
+            (push :render events)))
+         (nerimux::%queue-session-control-output
+          (lambda (session) (declare (ignore session))
+            (push :control-queue events)))
+         (nerimux::%handle-multi-client-message
+          (lambda (type payload session client)
+            (declare (ignore type payload session client))
+            (push :dispatch events)))
+         (nerimux/transport:read-frame-ready
+          (lambda (reader socket &key max-bytes)
+            (declare (ignore reader socket max-bytes))
+            (incf reader-calls)
+            (if (= reader-calls 1)
+                (values 1 #() :frame)
+                (values nil nil :would-block))))
+         (nerimux::%advance-client-output
+          (lambda (client &key max-bytes)
+            (declare (ignore client))
+            (expect (= 65536 max-bytes))
+            (push :write events)
+            (values :complete 5)))
+         (nerimux/net::socket-fd
+          (lambda (listener) (declare (ignore listener)) 7))
+         (nerimux/pty::select-fds
+          (lambda (read-fds timeout-us &key write-fds)
+            (push (list :select read-fds write-fds) events)
+            (expect (<= 0 timeout-us 50000))
+            (values (list 8) (list 8)))))
+      (expect (null (nerimux::%multi-serve-iteration :listener :session)))
+      (expect
+       (equal '(:select :dispatch :control-queue :write
+                :callbacks :jobs :persist :render)
+              (mapcar (lambda (event)
+                        (if (and (consp event) (eq :select (first event)))
+                            :select
+                            event))
+                      (nreverse events))))))) (it "multi-serve-iteration-selects-only-pending-write-fds"
+  (let* ((conn-a (%make-test-conn))
+         (conn-b (%make-test-conn))
+         (selected-read-fds nil)
+         (selected-write-fds nil)
+         (selected-timeout nil)
+         (nerimux::*clients* (list conn-a conn-b))
+         (nerimux::*dirty* nil)
+         (nerimux::*server-termination-requested-p* nil)
+         (nerimux::*client-read-round-robin-cursor* nil)
+         (nerimux::*client-write-round-robin-cursor* nil))
+    (setf (nerimux::client-conn-fd conn-a) 8
+          (nerimux::client-conn-fd conn-b) 9)
+    (nerimux::%queue-client-control-frame
+     conn-a (nerimux/protocol:msg-reply "pending"))
+    (with-stubbed-fdefinition
+        ((nerimux::%drain-main-thread-callbacks (lambda () nil))
+         (nerimux::%workspace-job-tick (lambda () nil))
+         (nerimux::%persist-runtime-state
+          (lambda (session) (declare (ignore session))))
+         (nerimux::%queue-session-control-output
+          (lambda (session) (declare (ignore session))))
+         (nerimux::%schedule-client-render-frames
+          (lambda (session &optional now) (declare (ignore session now))))
+         (nerimux/net::socket-fd
+          (lambda (listener) (declare (ignore listener)) 7))
+         (nerimux/pty::select-fds
+          (lambda (read-fds timeout-us &key write-fds)
+            (setf selected-read-fds read-fds
+                  selected-write-fds write-fds
+                  selected-timeout timeout-us)
+            (values nil nil))))
+      (expect (null (nerimux::%multi-serve-iteration :listener :session))))
+    (expect (equal (list 7 8 9) selected-read-fds))
+    (expect (equal (list 8) selected-write-fds))
+    (expect (<= 0 selected-timeout 50000)))) (it "run-multi-server-loop-stops-on-quit-and-drops-all-clients"
     (let ((events nil)
           (first-call t)
           (conn-a (%make-test-conn))
@@ -262,24 +355,41 @@
           (expect
            (nerimux/workspace-model:worktree-waiting-host-notified-p worktree)))))
 
-  (it "broadcast-queues-render-state-for-each-client"
-    (with-fake-session (session)
-      (let* ((conn-a (%make-test-conn))
-             (conn-b (%make-test-conn))
-             (frame (nerimux/protocol:msg-frame "screen"))
-             (nerimux::*clients* (list conn-a conn-b))
-             (nerimux::*dirty* t))
-        (with-stubbed-fdefinition
-            ((nerimux::%render-client-frame
-              (lambda (ignored-session ignored-conn)
-                (declare (ignore ignored-session ignored-conn))
-                frame)))
-          (expect (finishes (nerimux::%broadcast-frame session))))
-        (expect (eq frame
-                    (first (nerimux::client-conn-pending-render-state conn-a))))
-        (expect (eq frame
-                    (first (nerimux::client-conn-pending-render-state conn-b))))
-        (expect (= 2 (length nerimux::*clients*))))))
+  (it "render-scheduling-throttles-and-coalesces-dirty-state"
+  (let* ((conn (%make-test-conn))
+         (first-frame (nerimux/protocol:msg-frame "first"))
+         (latest-frame (nerimux/protocol:msg-frame "latest"))
+         (render-count 0)
+         (now 10000)
+         (interval (nerimux::%client-render-interval-ticks))
+         (nerimux::*clients* (list conn))
+         (nerimux::*dirty* t))
+    (with-stubbed-fdefinition
+        ((nerimux::%render-client-frame
+          (lambda (session client)
+            (declare (ignore session client))
+            (incf render-count)
+            (if (= render-count 1) first-frame latest-frame))))
+      (nerimux::%schedule-client-render-frames :session now)
+      (expect (= 1 render-count))
+      (expect
+       (eq first-frame
+           (first (nerimux::client-conn-pending-render-state conn))))
+      (setf nerimux::*dirty* t)
+      (nerimux::%schedule-client-render-frames :session (+ now (1- interval)))
+      (expect (= 1 render-count))
+      (expect (nerimux::client-conn-render-dirty-p conn))
+      (expect
+       (eq first-frame
+           (first (nerimux::client-conn-pending-render-state conn))))
+      (nerimux::%schedule-client-render-frames :session (+ now interval))
+      (expect (= 2 render-count))
+      (expect
+       (eq latest-frame
+           (first (nerimux::client-conn-pending-render-state conn))))
+      (expect (= (+ now interval)
+                 (nerimux::client-conn-last-render-at conn)))
+      (expect (null (nerimux::client-conn-active-output-frame conn))))))
 
   (it "client-output-writes-control-frames-in-fifo-order"
     (let* ((conn (%make-test-conn))

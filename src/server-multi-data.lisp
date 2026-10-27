@@ -201,8 +201,19 @@
   (process-log-scroll 0 :type fixnum)
   (frame nil)
   (row-frame-candidate nil)
-  (sent-row-frame nil))
-(declaim (special *clients*))
+  (sent-row-frame nil)
+  (render-dirty-p t :type boolean)
+  (last-render-at nil))
+(progn
+  (declaim (special *clients*))
+  (defvar *client-read-round-robin-cursor* nil)
+  (defvar *client-write-round-robin-cursor* nil)
+  (defun %rotate-client-order (clients cursor)
+    (let ((index (and cursor (position cursor clients :test #'eq))))
+      (if index
+          (append (nthcdr (1+ index) clients)
+                  (subseq clients 0 (1+ index)))
+          clients))))
 (defvar *last-selected-worktree-token* nil)
 (defvar *client-esc-swallow-counts*
   (make-hash-table :test #'eq :weakness :key))
