@@ -385,7 +385,9 @@ REFRESH works from."
   repository)
 
 (defun worktree-status (worktree)
-  "Refresh WORKTREE status from vcs-status-structured."
+  "Refresh WORKTREE status from vcs-status-structured. This synchronous API is
+for single-thread callers and must not be used concurrently with asynchronous
+status updates."
   (let ((repository (nerimux/workspace-model:worktree-repository worktree)))
     (%apply-worktree-status repository (%read-worktree-status worktree))
     (when repository

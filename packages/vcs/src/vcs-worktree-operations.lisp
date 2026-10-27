@@ -382,7 +382,9 @@ default branch tip when not given."
   (refresh-repository-status repository))
 
 (defun delete-worktree (worktree &key force)
-  "Remove WORKTREE after protecting the repository's primary checkout."
+  "Remove WORKTREE after protecting the repository's primary checkout. This
+synchronous API is for single-thread callers and must not be used concurrently
+with asynchronous worktree updates."
   (let ((repository (%delete-worktree-command worktree force)))
     (%refresh-worktree-repository repository)
     t))

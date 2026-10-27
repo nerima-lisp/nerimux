@@ -223,4 +223,66 @@
           (expect (equal "forced stash failure"
                          (nerimux/workspace-model:worktree-stashes-error-message
                           worktree)))
-          (expect (null (nerimux/workspace-model:worktree-stashes worktree)))))))))
+          (expect (null (nerimux/workspace-model:worktree-stashes worktree)))))))
+  (it "applies the stash failure when status reading also fails"
+    (let* ((path (namestring (host-kit:temporary-directory)))
+           (repository
+             (nerimux/workspace-model:make-repository
+              :specification "workspace-owner/status-and-stash-error"
+              :local-path path))
+           (worktree
+             (nerimux/workspace-model:make-worktree
+              :repository repository :path path))
+           (status-reason "git status exited 128: fatal: status denied")
+           (stash-reading nil)
+           (update nil))
+      (nerimux/workspace-model:repository-add-worktree repository worktree)
+      (sb-ext:without-package-locks
+        (with-stubbed-fdefinition
+            ((nerimux/vcs::%git-stash-entries
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 (error "forced stash failure")))
+             (nerimux/vcs::%git-status-snapshot
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 (error
+                  (make-condition
+                   (find-symbol "%GIT-READ-ERROR" :nerimux/vcs)
+                   :directory path :subcommand "status" :arguments nil
+                   :exit-code 128 :stderr "fatal: status denied"))))
+             (log-kit:emit-log
+               (lambda (&rest arguments)
+                 (declare (ignore arguments))
+                 nil)))
+          (setf stash-reading (nerimux/vcs::%read-stashes-at path)
+                update
+                (nerimux/vcs::%read-worktree-status-at
+                 path nil path :stashes stash-reading)))
+        (expect
+         (eq :failed (nerimux/vcs::%stash-reading-state stash-reading)))
+        (expect
+         (equal "forced stash failure"
+                (nerimux/vcs::%stash-reading-error-message stash-reading)))
+        (expect
+         (eq :read-error
+             (nerimux/vcs::%worktree-status-update-status-state update)))
+        (expect
+         (equal status-reason
+                (nerimux/vcs::%worktree-status-update-status-error-message update)))
+        (expect
+         (eq stash-reading (nerimux/vcs::%worktree-status-update-stashes update)))
+        (nerimux/vcs::%apply-worktree-status repository update)
+        (expect
+         (eq :read-error
+             (nerimux/workspace-model:worktree-status-state worktree)))
+        (expect
+         (equal status-reason
+                (nerimux/workspace-model:worktree-status-error-message worktree)))
+        (expect
+         (eq :failed
+             (nerimux/workspace-model:worktree-stashes-state worktree)))
+        (expect
+         (equal "forced stash failure"
+                (nerimux/workspace-model:worktree-stashes-error-message worktree)))
+        (expect (null (nerimux/workspace-model:worktree-stashes worktree))))))))

@@ -422,7 +422,8 @@ column, worktree side) -- magit's unstaged section (Unit MODEL)."
             (%make-worktree-status-update
              :path path
              :status-state :read-error
-             :status-error-message (%git-read-error-message condition))))))
+             :status-error-message (%git-read-error-message condition)
+             :stashes (and stashes-supplied-p stashes))))))
 )
 
 (defun %read-worktree-status (worktree &key (stashes nil stashes-supplied-p))
@@ -474,7 +475,8 @@ read."
           (setf (nerimux/workspace-model:worktree-missing-p worktree) nil)
           (nerimux/workspace-model:worktree-transition-status
            worktree :read-error
-           :error-message (%worktree-status-update-status-error-message update)))
+           :error-message (%worktree-status-update-status-error-message update))
+          (%apply-worktree-stash-reading worktree update))
         (progn
           (setf (nerimux/workspace-model:worktree-missing-p worktree)
                 (%worktree-status-update-missing-p update))
