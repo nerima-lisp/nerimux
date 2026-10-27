@@ -548,6 +548,30 @@
                                    first-frame second-frame)
                       sent))
       (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))))
+  (it "client-output-writers-round-robin-two-pending-clients"
+    (let* ((conn-a (%make-test-conn))
+           (conn-b (%make-test-conn))
+           (advanced nil)
+           (nerimux::*clients* (list conn-a conn-b))
+           (nerimux::*client-write-round-robin-cursor* nil))
+      (setf (nerimux::client-conn-fd conn-a) 8
+            (nerimux::client-conn-fd conn-b) 9)
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame
+                   conn-a (nerimux/protocol:msg-reply "round a"))))
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame
+                   conn-b (nerimux/protocol:msg-reply "round b"))))
+      (with-stubbed-fdefinition
+          ((nerimux::%advance-client-output
+            (lambda (conn &key max-bytes)
+              (declare (ignore max-bytes))
+              (push (if (eq conn conn-a) :a :b) advanced)
+              (values :pending 1))))
+        (nerimux::%flush-ready-client-output '(8 9) (list conn-a conn-b))
+        (nerimux::%flush-ready-client-output '(8 9) (list conn-a conn-b)))
+      (expect (equal '(:a :b :b :a) (nreverse advanced)))
+      (expect (eq conn-b nerimux::*client-write-round-robin-cursor*))))
   (it "client-output-control-queue-overflow-drops-and-clears-client"
     (let* ((conn (%make-test-conn))
            (in-flight-frame (nerimux/protocol:msg-reply "in-flight"))
