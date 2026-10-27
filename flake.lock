@@ -162,16 +162,16 @@
     "cl-process-kit": {
       "flake": false,
       "locked": {
-        "lastModified": 1792823219,
-        "narHash": "sha256-oDG0TL5VTsU4tunb0i+HDtUF/TzLCNJYTFzivSk8kx4=",
+        "lastModified": 1793060671,
+        "narHash": "sha256-mbQeN76U1N82Hw3fq87KR8Yt8VoJ4UtV1I/5iFI7BBU=",
         "owner": "nerima-lisp",
         "repo": "cl-process-kit",
-        "rev": "be552c576598e4c154fea0b86243cded0985acf5",
+        "rev": "2a091adbcd236e697f460eedd7f0f79a0dd46da8",
         "type": "github"
       },
       "original": {
         "owner": "nerima-lisp",
-        "ref": "v3.4.1",
+        "ref": "v3.4.3",
         "repo": "cl-process-kit",
         "type": "github"
       }

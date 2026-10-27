@@ -39,7 +39,7 @@
       flake = false;
     };
     cl-process-kit = {
-      url = "github:nerima-lisp/cl-process-kit/v3.4.1";
+      url = "github:nerima-lisp/cl-process-kit/v3.4.3";
       flake = false;
     };
     cl-log-kit = {
