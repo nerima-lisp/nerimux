@@ -739,7 +739,10 @@
                                       :write-fds write-fds)))
                           (nerimux/pty:terminal-size
                            (lambda () (values 30 100)))
-                          (nerimux::%client-terminal-identity (lambda () nil)))
+                          (nerimux::%client-terminal-identity
+                           (lambda ()
+                             (list (cons "TERM_PROGRAM" "kitty")
+                                   (cons "KITTY_WINDOW_ID" "42")))))
                        (setf thread
                              (sb-thread:make-thread
                               (lambda ()
@@ -759,7 +762,13 @@
                              (nerimux/protocol:decode-attach payload)
                            (expect (= 24 rows))
                            (expect (= 80 cols))
-                           (expect (null environment))))
+                           (expect (equal (list (cons "TERM_PROGRAM" "kitty")
+                                                (cons "KITTY_WINDOW_ID" "42"))
+                                          environment))
+                           (expect (null (assoc "PATH" environment
+                                                :test (function string=))))
+                           (expect (null (assoc "TERM" environment
+                                                :test (function string=))))))
                        (multiple-value-bind (type payload)
                            (nerimux/transport:read-frame server-stream)
                          (expect (= +msg-command+ type))
@@ -827,3 +836,114 @@
                 (nerimux::%client-restore-fd-flags
                  output-write output-write-flags)))))))
 ))))
+(describe "client-stdout-readiness-suite"
+  (it "client-output-short-write-eagain-resumes-same-item-offset"
+    (let* ((queue (nerimux::%make-client-output-queue))
+           (bytes (make-array 6
+                              :element-type (quote (unsigned-byte 8))
+                              :initial-contents (list 97 98 99 100 101 102)))
+           (item nil)
+           (remaining-counts (list 3 nil 3))
+           (writes nil)
+           (output
+             (make-array 0 :element-type (quote (unsigned-byte 8)))))
+      (nerimux::%client-enqueue-output queue bytes)
+      (setf item (car (nerimux::%client-output-queue-head queue)))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-write-fd
+            (lambda (fd buffer start length)
+              (declare (ignore fd))
+              (push (list start length) writes)
+              (let ((count (pop remaining-counts)))
+                (when count
+                  (setf output
+                        (concatenate
+                         (quote (simple-array (unsigned-byte 8) (*)))
+                         output
+                         (subseq buffer start (+ start count)))))
+                count))))
+        (nerimux::%client-write-output-ready queue 71)
+        (expect (= 3 (nerimux::%client-output-item-offset item)))
+        (expect (= 3 (nerimux::%client-output-queue-bytes queue)))
+        (nerimux::%client-write-output-ready queue 71)
+        (expect (= 3 (nerimux::%client-output-item-offset item)))
+        (expect (= 3 (nerimux::%client-output-queue-bytes queue)))
+        (nerimux::%client-write-output-ready queue 71)
+        (expect (equalp #(97 98 99 100 101 102) output))
+        (expect (equal (quote ((0 6) (3 3) (3 3)))
+                       (nreverse writes)))
+        (expect (= 6 (nerimux::%client-output-item-offset item)))
+        (expect (null (nerimux::%client-output-queue-head queue)))
+        (expect (zerop (nerimux::%client-output-queue-bytes queue))))))
+  (it "run-client-detach-with-unwritable-stdout-restores-terminal-and-fds"
+    (let ((events nil)
+          (timed-out nil))
+      (handler-case
+          (sb-ext:with-timeout 0.2
+            (with-stubbed-fdefinition
+                ((nerimux::socket-path
+                  (lambda (name)
+                    (declare (ignore name))
+                    "/tmp/nerimux-test-client.sock"))
+                 (nerimux/net:connect-to
+                  (lambda (path)
+                    (declare (ignore path))
+                    :socket))
+                 (nerimux/net:socket-fd
+                  (lambda (socket)
+                    (declare (ignore socket))
+                    99))
+                 (nerimux/pty:terminal-size
+                  (lambda () (values 24 80)))
+                 (nerimux::install-sigwinch-handler (lambda () nil))
+                 (nerimux/pty:enable-raw-mode!
+                  (lambda (fd)
+                    (declare (ignore fd))
+                    (push :raw-enabled events)))
+                 (nerimux/pty:disable-raw-mode!
+                  (lambda (fd)
+                    (declare (ignore fd))
+                    (push :raw-disabled events)))
+                 (nerimux::%client-fd-flags
+                  (lambda (fd)
+                    (if (= fd 0) 10 20)))
+                 (nerimux::%client-set-nonblocking
+                  (lambda (fd)
+                    (declare (ignore fd))
+                    nil))
+                 (nerimux::%client-restore-fd-flags
+                  (lambda (fd flags)
+                    (push (list :fd-restored fd flags) events)))
+                 (nerimux/pty:select-fds
+                  (lambda (read-fds timeout-us &key write-fds)
+                    (declare (ignore read-fds timeout-us))
+                    (push (list :write-fd-waited write-fds) events)
+                    (values nil nil)))
+                 (nerimux::%client-write-fd
+                  (lambda (fd bytes start length)
+                    (declare (ignore fd bytes start length))
+                    (push :stdout-blocked events)
+                    nil))
+                 (nerimux::%run-attach-session
+                  (lambda (socket fd target queue &optional input-fd output-fd)
+                    (declare (ignore socket fd target queue input-fd output-fd))
+                    (push :detached events)
+                    nil))
+                 (nerimux/net:close-socket
+                  (lambda (&rest args)
+                    (declare (ignore args))
+                    (push :socket-closed events))))
+              (nerimux::run-client "7")))
+        (sb-ext:timeout () (setf timed-out t)))
+      (expect (not timed-out))
+      (expect (member (list :write-fd-waited (list 1)) events
+                       :test (function equal))
+              :to-be-truthy)
+      (expect (member :detached events) :to-be-truthy)
+      (expect (member :raw-enabled events) :to-be-truthy)
+      (expect (member :raw-disabled events) :to-be-truthy)
+      (expect (member (list :fd-restored 0 10) events :test (function equal))
+              :to-be-truthy)
+      (expect (member (list :fd-restored 1 20) events :test (function equal))
+              :to-be-truthy)
+      (expect (member :socket-closed events) :to-be-truthy))))
