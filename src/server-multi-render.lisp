@@ -628,6 +628,22 @@
               (setf (client-conn-render-dirty-p conn) nil
                     (client-conn-last-render-at conn) now))))))
     nil)
+  (defun %refresh-pending-client-render-frames
+    (session &optional (now (get-internal-real-time)))
+    "Replace a stale, unstarted render after input while respecting the render rate."
+    (dolist (conn (copy-list *clients*))
+      (when (and (client-conn-pending-render-state conn)
+                 (client-conn-render-dirty-p conn)
+                 (not (client-conn-close-after-write-p conn)))
+        (if (or (null (%client-render-deadline conn))
+                (>= now (%client-render-deadline conn)))
+            (with-loop-safe-error (nil :on-error (%drop-client conn))
+              (%send-client-frame conn (%render-client-frame session conn))
+              (when (member conn *clients*)
+                (setf (client-conn-render-dirty-p conn) nil
+                      (client-conn-last-render-at conn) now)))
+            (setf (client-conn-pending-render-state conn) nil))))
+    nil)
 
   (defun %queue-session-control-output (session)
     (when *clients*

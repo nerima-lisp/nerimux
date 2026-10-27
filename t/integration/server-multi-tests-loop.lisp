@@ -221,7 +221,60 @@
                         (if (and (consp event) (eq :select (first event)))
                             :select
                             event))
-                      (nreverse events))))))) (it "multi-serve-iteration-selects-only-pending-write-fds"
+                      (nreverse events))))))) (it "multi-serve-iteration-refreshes-unstarted-render-after-input"
+  (let* ((conn (%make-test-conn))
+         (old-frame (nerimux/protocol:msg-frame "old geometry"))
+         (latest-frame nil)
+         (sent (make-array 0 :element-type (quote (unsigned-byte 8))))
+         (nerimux::*clients* (list conn))
+         (nerimux::*dirty* nil)
+         (nerimux::*server-termination-requested-p* nil)
+         (nerimux::*client-read-round-robin-cursor* nil)
+         (nerimux::*client-write-round-robin-cursor* nil))
+    (setf (nerimux::client-conn-fd conn) 8
+          (nerimux::client-conn-socket conn) :client)
+    (nerimux::%queue-client-render-state conn old-frame nil)
+    (with-stubbed-fdefinition
+        ((nerimux::%drain-main-thread-callbacks (lambda () nil))
+         (nerimux::%workspace-job-tick (lambda () nil))
+         (nerimux::%persist-runtime-state
+          (lambda (session) (declare (ignore session))))
+         (nerimux::%queue-session-control-output
+          (lambda (session) (declare (ignore session))))
+         (nerimux::%dispatch-ready-clients
+          (lambda (session ready)
+            (declare (ignore session ready))
+            (setf (nerimux::client-conn-rows conn) 40
+                  (nerimux::client-conn-cols conn) 100
+                  (nerimux::client-conn-render-dirty-p conn) t)
+            nil))
+         (nerimux::%render-client-frame
+          (lambda (session client)
+            (declare (ignore session))
+            (setf latest-frame
+                  (nerimux/protocol:msg-frame
+                   (format nil "geometry ~Dx~D"
+                           (nerimux::client-conn-rows client)
+                           (nerimux::client-conn-cols client))))))
+         (sb-bsd-sockets:socket-send
+          (lambda (socket buffer length &key dontwait nosignal)
+            (declare (ignore socket dontwait nosignal))
+            (setf sent
+                  (concatenate (quote (vector (unsigned-byte 8)))
+                               sent
+                               (subseq buffer 0 length)))
+            length))
+         (nerimux/net::socket-fd
+          (lambda (listener) (declare (ignore listener)) 7))
+         (nerimux/pty::select-fds
+          (lambda (read-fds timeout-us &key write-fds)
+            (declare (ignore read-fds timeout-us write-fds))
+            (values (list 8) (list 8)))))
+      (expect (null (nerimux::%multi-serve-iteration :listener :session))))
+    (expect latest-frame)
+    (expect (equalp latest-frame sent))
+    (expect (null (nerimux::client-conn-pending-render-state conn)))
+    (expect (not (nerimux::client-conn-render-dirty-p conn))))) (it "multi-serve-iteration-selects-only-pending-write-fds"
   (let* ((conn-a (%make-test-conn))
          (conn-b (%make-test-conn))
          (selected-read-fds nil)

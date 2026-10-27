@@ -115,6 +115,7 @@
       (%accept-pending-connection listener listener-fd read-ready)
       (let ((disposition (%dispatch-ready-clients session read-ready)))
         (%queue-session-control-output session)
+        (%refresh-pending-client-render-frames session)
         (%flush-ready-client-output write-ready previously-pending)
         (when (eq :quit disposition)
           (return-from %multi-serve-iteration :quit))
