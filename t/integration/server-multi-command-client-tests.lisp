@@ -329,4 +329,124 @@
                       (nerimux::%drop-client conn)))
                   (dolist (socket
                             (remove nil (list client1 client2 server1 server2)))
-                    (ignore-errors (nerimux/net:close-socket socket))))))))))))
+                    (ignore-errors (nerimux/net:close-socket socket)))))))))))
+  (it "multi-server-dispatches-healthy-client-while-slow-reader-is-backpressured"
+    (with-fake-session (session)
+      (with-test-listener
+          (listener path (%test-socket-path "slow-reader") :backlog 4)
+        (let* ((client-a (nerimux/net:connect-to path))
+               (server-a (nerimux/net:accept-connection listener))
+               (client-b (nerimux/net:connect-to path))
+               (server-b (nerimux/net:accept-connection listener))
+               (conn-a nil)
+               (conn-b nil)
+               (nerimux::*clients* nil)
+               (nerimux::*running* t)
+               (nerimux::*dirty* nil)
+               (nerimux::*server-termination-requested-p* nil)
+               (nerimux::*workspace-catalog-refresh-started-p* t)
+               (nerimux::*client-read-round-robin-cursor* nil)
+               (nerimux::*client-write-round-robin-cursor* nil))
+          (unwind-protect
+               (when (and client-a server-a client-b server-b)
+                 (setf (sb-bsd-sockets:sockopt-receive-buffer client-a) 4096
+                       (sb-bsd-sockets:sockopt-send-buffer server-a) 4096
+                       conn-a (nerimux::%add-client server-a)
+                       conn-b (nerimux::%add-client server-b)
+                       (nerimux::client-conn-render-dirty-p conn-a) nil
+                       (nerimux::client-conn-render-dirty-p conn-b) nil
+                       nerimux::*dirty* nil)
+                 (let* ((payload
+                          (make-array (* 2 1024 1024)
+                                      :element-type '(unsigned-byte 8)
+                                      :initial-element 65))
+                        (frame
+                          (nerimux/protocol:encode-frame
+                           nerimux/protocol:+msg-frame+ payload)))
+                   (expect (eq :queued
+                               (nerimux::%queue-client-render-state
+                                conn-a frame nil)))
+                   (flet ((server-a-writable-p ()
+                            (member (nerimux::client-conn-fd conn-a) (nth-value 1 (nerimux/pty:select-fds nil 0 :write-fds (list (nerimux::client-conn-fd conn-a))))))
+                          (client-readable-p (conn)
+                            (let ((fd (nerimux::client-conn-fd conn)))
+                              (member
+                               fd
+                               (nth-value
+                                0
+                                (nerimux/pty:select-fds (list fd) 1000000)))))
+                          (multi-serve-once ()
+                            (let ((real-select-fds
+                                    (fdefinition 'nerimux/pty:select-fds)))
+                              (with-stubbed-fdefinition
+                                  ((nerimux/pty:select-fds
+                                    (lambda (read-fds timeout-us &key write-fds)
+                                      (funcall real-select-fds
+                                               read-fds
+                                               (min timeout-us 100000)
+                                               :write-fds write-fds))))
+                                (nerimux::%multi-serve-iteration
+                                 listener session)))))
+                     (loop repeat 512
+                           while (and (nerimux::%client-output-pending-p conn-a)
+                                      (server-a-writable-p))
+                           do (nerimux::%advance-client-output conn-a :max-bytes 1024))
+                     (expect (not (server-a-writable-p)) :to-be-truthy)
+                     (expect
+                      (nerimux/transport:frame-writer-pending-p
+                       (nerimux::client-conn-frame-writer conn-a))
+                      :to-be-truthy)
+                     (expect
+                      (plusp
+                       (nerimux/transport:frame-writer-offset
+                        (nerimux::client-conn-frame-writer conn-a)))
+                      :to-be-truthy)
+                     (with-stubbed-fdefinition
+                         ((nerimux::%drain-main-thread-callbacks
+                           (lambda () nil))
+                          (nerimux::%workspace-job-tick (lambda () nil))
+                          (nerimux::%persist-runtime-state
+                           (lambda (current-session)
+                             (declare (ignore current-session))))
+                          (nerimux::%queue-session-control-output
+                           (lambda (current-session)
+                             (declare (ignore current-session))))
+                          (nerimux::%refresh-pending-client-render-frames
+                           (lambda (current-session)
+                             (declare (ignore current-session))))
+                          (nerimux::%schedule-client-render-frames
+                           (lambda (current-session &optional now)
+                             (declare (ignore current-session now)))))
+                       (send-frame
+                        (nerimux/net:socket-stream client-b)
+                        (msg-key #(36)))
+                       (force-output (nerimux/net:socket-stream client-b))
+                       (expect (client-readable-p conn-b) :to-be-truthy)
+                       (multi-serve-once)
+                       (expect (eq :process-log
+                                   (nerimux::client-conn-modal conn-b)))
+                       (nerimux/net:close-socket client-a)
+                       (setf client-a nil)
+                       (expect (client-readable-p conn-a) :to-be-truthy)
+                       (multi-serve-once)
+                       (expect
+                        (not (member conn-a nerimux::*clients* :test #'eq))
+                        :to-be-truthy)
+                       (expect (member conn-b nerimux::*clients* :test #'eq)
+                               :to-be-truthy)
+                       (expect nerimux::*running* :to-be-truthy)
+                       (send-frame
+                        (nerimux/net:socket-stream client-b)
+                        (msg-key #(113)))
+                       (force-output (nerimux/net:socket-stream client-b))
+                       (expect (client-readable-p conn-b) :to-be-truthy)
+                       (multi-serve-once)
+                       (expect (null (nerimux::client-conn-modal conn-b)))
+                       (expect (member conn-b nerimux::*clients* :test #'eq)
+                               :to-be-truthy)
+                       (expect nerimux::*running* :to-be-truthy))))
+            (dolist (conn (remove nil (list conn-a conn-b)))
+              (when (member conn nerimux::*clients* :test #'eq)
+                (nerimux::%drop-client conn)))
+            (dolist (socket (remove nil (list client-a client-b server-a server-b)))
+              (ignore-errors (nerimux/net:close-socket socket))))))))))
