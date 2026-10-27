@@ -160,7 +160,9 @@
                                                          do (sb-thread:thread-yield)))))
                                             (expect marker-seen-p :to-be-truthy))
                                           (setf nerimux::*dirty* t)
-                                          (nerimux::%broadcast-frame s)
+                                          (progn
+                                            (nerimux::%broadcast-frame s)
+                                            (nerimux::%flush-client-output :drain t))
                                           (let ((ready
                                                  (select-fds
                                                   (list
