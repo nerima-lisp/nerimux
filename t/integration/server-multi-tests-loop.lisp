@@ -562,6 +562,50 @@
         (expect (eq second-frame
                     (first (nerimux::client-conn-pending-render-state conn))))
         (expect (equalp first-frame sent)))))
+  (it "client-close-drops-unstarted-render-and-drains-bye"
+    (let* ((conn (%make-test-conn))
+           (active-frame (nerimux/protocol:msg-frame "active"))
+           (pending-frame (nerimux/protocol:msg-frame "pending"))
+           (bye-frame (nerimux/protocol:msg-bye))
+           (sent (make-array 0 :element-type '(unsigned-byte 8)))
+           (calls 0)
+           (nerimux::*clients* (list conn)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-render-state conn active-frame nil)))
+      (with-stubbed-fdefinition
+          ((sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket dontwait nosignal))
+              (incf calls)
+              (setf sent
+                    (concatenate '(vector (unsigned-byte 8))
+                                 sent
+                                 (subseq buffer 0 length)))
+              (if (= calls 1) 2 length))))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn :max-bytes 2)
+          (expect (eq :pending status))
+          (expect (= 2 bytes-written)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-render-state conn pending-frame nil)))
+        (expect (eq :closing (nerimux::%drop-client conn :bye t)))
+        (expect (nerimux::client-conn-close-after-write-p conn))
+        (expect (null (nerimux::client-conn-pending-render-state conn)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn)
+          (expect (eq :complete status))
+          (expect (= (- (length active-frame) 2) bytes-written)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn)
+          (expect (eq :complete status))
+          (expect (= (length bye-frame) bytes-written))))
+      (expect (null nerimux::*clients*))
+      (expect
+       (equalp (concatenate '(vector (unsigned-byte 8))
+                            active-frame bye-frame)
+               sent))
+      (expect (not (nerimux/transport:frame-writer-pending-p
+                    (nerimux::client-conn-frame-writer conn))))))
 
   (it "client-output-fatal-partial-write-drops-and-clears-client-state"
   (let* ((conn (%make-test-conn))
