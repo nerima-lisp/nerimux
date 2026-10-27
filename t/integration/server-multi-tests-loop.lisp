@@ -711,6 +711,54 @@
                  (nerimux::client-conn-control-frame-bytes conn)))
       (expect (equalp bye-frame
                       (first (nerimux::client-conn-control-frame-head conn))))))
+  (it "client-output-timeout-drops-and-clears-client-state"
+    (let* ((conn (%make-test-conn))
+           (healthy (%make-test-conn))
+           (frame (nerimux/protocol:msg-reply "timeout"))
+           (nerimux::*clients* (list conn healthy))
+           (nerimux::*dirty* nil)
+           (nerimux::*server-termination-requested-p* nil)
+           (nerimux::*client-read-round-robin-cursor* nil)
+           (nerimux::*client-write-round-robin-cursor* nil))
+      (setf (nerimux::client-conn-fd conn) 8
+            (nerimux::client-conn-fd healthy) 9)
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame conn frame)))
+      (with-stubbed-fdefinition
+          ((sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket buffer length dontwait nosignal))
+              (error 'sb-ext:timeout)))
+           (nerimux/net::socket-fd
+            (lambda (listener)
+              (declare (ignore listener))
+              7))
+           (nerimux/pty:select-fds
+            (lambda (read-fds timeout-us &key write-fds)
+              (declare (ignore read-fds timeout-us))
+              (expect (equal (list 8) write-fds))
+              (values nil write-fds)))
+           (nerimux::%queue-session-control-output
+            (lambda (session) (declare (ignore session))))
+           (nerimux::%refresh-pending-client-render-frames
+            (lambda (session &optional now)
+              (declare (ignore session now))))
+           (nerimux::%drain-main-thread-callbacks (lambda () nil))
+           (nerimux::%workspace-job-tick (lambda () nil))
+           (nerimux::%persist-runtime-state
+            (lambda (session) (declare (ignore session))))
+           (nerimux::%schedule-client-render-frames
+            (lambda (session &optional now)
+              (declare (ignore session now)))))
+        (expect (null
+                 (nerimux::%multi-serve-iteration :listener :session))))
+      (expect (not (member conn nerimux::*clients* :test #'eq)))
+      (expect (member healthy nerimux::*clients* :test #'eq))
+      (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))
+      (expect (null (nerimux::client-conn-control-frame-head conn)))
+      (expect (null (nerimux::client-conn-active-output-frame conn)))
+      (expect (not (nerimux/transport:frame-writer-pending-p
+                    (nerimux::client-conn-frame-writer conn))))))
   (it "client-output-fatal-partial-write-drops-and-clears-client-state"
   (let* ((conn (%make-test-conn))
          (first-frame (nerimux/protocol:msg-reply "first"))
