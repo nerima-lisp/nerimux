@@ -29,7 +29,9 @@
                              (nerimux::%dispatch-ready-clients
                               s (list (nerimux::client-conn-fd bad-conn)))))
                      (expect (not (eq :quit result)))
-                     (expect (equal (list good-conn) nerimux::*clients*))))
+                     (progn
+                       (nerimux::%flush-client-output :drain t)
+                       (expect (equal (list good-conn) nerimux::*clients*)))))
               (ignore-errors (nerimux/net:close-socket attacker))
               (when bystander
                 (ignore-errors (nerimux/net:close-socket bystander))))))))))

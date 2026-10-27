@@ -308,11 +308,10 @@
   nil)
 
 (defun %send-client-parting (conn text)
-  "Send TEXT as the line CONN prints once it has left the alternate screen
+  "Queue TEXT as the line CONN prints once it has left the alternate screen
    (client.lisp).  Detach and quit otherwise end in the same blank host
    terminal, with nothing saying which of the two happened."
-  (handler-case (send-frame (client-conn-stream conn) (msg-reply text))
-    (peer-io-failure () nil)))
+  (%queue-client-control-frame conn (msg-reply text)))
 
 (defun %workspace-prefix-detach (session conn)
   "C-q d: leave the session running and tell CONN what it left behind."

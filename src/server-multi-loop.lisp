@@ -38,12 +38,8 @@
    nobody is attached (R8.3)."
   (case disposition
     (:quit :quit)
-    (:eof
-      (%drop-client conn :bye nil)
-      nil)
-    (:drop
-      (%drop-client conn :bye t)
-      nil)))
+    (:eof (%drop-client conn :bye nil) nil)
+    (:drop (%drop-client conn :bye t) nil)))
 
 (defun %dispatch-buffered-client-messages (session conn)
   "Dispatch the message select reported for CONN, then keep dispatching while
@@ -87,20 +83,26 @@
   (%persist-runtime-state session)
   (%broadcast-frame session)
   (let* ((listener-fd (socket-fd listener))
-         (ready (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+)))
-    (when ready
-      (%accept-pending-connection listener listener-fd ready)
-      (%dispatch-ready-clients session ready))))
+         (ready (select-fds (cons listener-fd (%client-fds)) +poll-timeout-us+))
+         (disposition
+           (when ready
+             (%accept-pending-connection listener listener-fd ready)
+             (%dispatch-ready-clients session ready))))
+    (%flush-client-output)
+    disposition))
 
 (defun %run-multi-server-loop (listener session)
-  "Drive %multi-serve-iteration until *running* clears or a command ends the
+  "Drive %MULTI-SERVE-ITERATION until *RUNNING* clears or a command ends the
    session.  Drops every remaining client (with a bye) on exit."
-  (unwind-protect 
+  (unwind-protect
       (loop while *running*
             do (when (eq :quit (%multi-serve-iteration listener session))
                  (setf *running* nil)))
     (dolist (conn (copy-list *clients*))
-      (%drop-client conn :bye t))))
+      (%drop-client conn :bye t))
+    (%flush-client-output :drain t)
+    (dolist (conn (copy-list *clients*))
+      (%drop-client conn))))
 
 
 (defun %session-live-panes (session)

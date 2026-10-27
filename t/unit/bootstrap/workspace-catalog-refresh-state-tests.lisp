@@ -747,13 +747,23 @@
                     (make-string-output-stream)))
            (conn (nerimux::%make-client-conn :stream stream))
            (nerimux::*clients* (list conn)))
+      (expect (eq :closing (nerimux::%drop-client conn :bye t)))
+      (expect (nerimux::client-conn-close-after-write-p conn))
+      (expect (equalp (nerimux/protocol:msg-bye)
+                      (first (nerimux::client-conn-control-frame-head conn))))
       (with-stubbed-fdefinition
-          ((nerimux/transport:send-frame
-            (lambda (&rest args)
-              (declare (ignore args))
+          ((sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket buffer length dontwait nosignal))
               (error 'stream-error :stream stream))))
-        (nerimux::%drop-client conn :bye t))
-      (expect (null nerimux::*clients*)))))
+        (expect (finishes (nerimux::%flush-client-output :drain t))))
+      (expect (null nerimux::*clients*))
+      (expect (null (nerimux::client-conn-control-frame-head conn)))
+      (expect (null (nerimux::client-conn-control-frame-tail conn)))
+      (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))
+      (expect (not (nerimux/transport:frame-writer-pending-p
+                    (nerimux::client-conn-frame-writer conn))))))
+)
 
 (describe "workspace-job outcome labels"
   (it "does not sanitize an already sanitized create error"

@@ -118,8 +118,15 @@
    :encoding :utf-8))
 
 (defun %send-host-notification (stream title body)
-  (send-frame stream
-              (msg-notification (%osc99-notification-bytes title body))))
+  (let ((conn (and stream
+                   (find stream *clients*
+                         :key #'client-conn-stream
+                         :test #'eq)))
+        (frame (msg-notification (%osc99-notification-bytes title body))))
+    (cond
+      (conn (%queue-client-control-frame conn frame))
+      (*clients* nil)
+      (t (send-frame stream frame)))))
 
 (defun %client-focuses-pane-p (pane)
   (some (lambda (conn)
@@ -573,29 +580,14 @@
         (client-conn-view conn) (client-conn-modal conn)))
 
 (defun %send-client-frame (conn frame)
-  "Cache and send FRAME to one client connection."
+  "Cache FRAME and replace CONN's unstarted render state."
   (setf (client-conn-frame conn) frame)
-  (let* ((candidate (client-conn-row-frame-candidate conn))
-         (eligible (and (eq frame (first candidate))
-                        (equal (%client-row-frame-key conn) (second candidate))))
-         (previous (client-conn-sent-row-frame conn))
-         (delta (when (and eligible
-                           (equal (second previous) (second candidate)))
-                  (nerimux/renderer:ansi-row-delta
-                   (third previous) (third candidate))))
-         (completed nil))
-    (unwind-protect
-         (progn
-           (unless (and delta (zerop (length delta)))
-             (send-frame (client-conn-stream conn)
-                         (if delta (msg-frame delta) frame)))
-           (setf (client-conn-sent-row-frame conn) (when eligible candidate)
-                 completed t))
-      ;; A partial write leaves the terminal state unknown, even if flush failed.
-      (unless completed (setf (client-conn-sent-row-frame conn) nil)))))
+  (%queue-client-render-state conn
+                              frame
+                              (client-conn-row-frame-candidate conn)))
 
 (defun %broadcast-frame (session)
-  "Render dirty content and broadcast one shared notification drain."
+  "Render dirty content and enqueue one shared notification drain."
   (when *clients*
     (let ((dirty (or *dirty* (some #'%client-message-expired-p *clients*)))
           (notifications (%drain-session-notifications session)))
@@ -603,14 +595,119 @@
       (when (or dirty notifications)
         (setf *dirty* nil)
         (dolist (conn (copy-list *clients*))
-          (with-loop-safe-error (nil :on-error (%drop-client conn))
-            (dolist (raw-sequence notifications)
-              (send-frame (client-conn-stream conn)
-                          (msg-notification raw-sequence)))
-            (when dirty
-              (%send-client-frame conn
-                                  (%render-client-frame session conn)))))))))
+          (unless (client-conn-close-after-write-p conn)
+            (with-loop-safe-error (nil :on-error (%drop-client conn))
+              (block client-output
+                (dolist (raw-sequence notifications)
+                  (unless (eq :queued
+                              (%queue-client-control-frame
+                               conn
+                               (msg-notification raw-sequence)))
+                    (return-from client-output nil)))
+                (when dirty
+                  (%send-client-frame
+                   conn
+                   (%render-client-frame session conn)))))))))))
 
 (defun %client-fds ()
-  "Return the socket fds of every attached client."
-  (mapcar #'client-conn-fd *clients*))
+  "Return socket fds for clients still accepting input."
+  (loop for conn in *clients*
+        unless (client-conn-close-after-write-p conn)
+          collect (client-conn-fd conn)))
+
+(defun %start-client-output-frame (conn)
+  (let ((writer (client-conn-frame-writer conn)))
+    (unless (nerimux/transport:frame-writer-pending-p writer)
+      (cond
+        ((client-conn-control-frame-head conn)
+         (let* ((node (client-conn-control-frame-head conn))
+                (frame (first node)))
+           (setf (client-conn-control-frame-head conn) (rest node)
+                 (client-conn-active-output-kind conn) :control
+                 (client-conn-active-output-frame conn) frame
+                 (client-conn-active-row-frame-candidate conn) nil)
+           (unless (client-conn-control-frame-head conn)
+             (setf (client-conn-control-frame-tail conn) nil))
+           (nerimux/transport:start-frame-write writer frame)
+           :started))
+        ((client-conn-pending-render-state conn)
+         (let* ((state (client-conn-pending-render-state conn))
+                (frame (first state))
+                (candidate (second state))
+                (eligible (and candidate
+                               (eq frame (first candidate))
+                               (equal (%client-row-frame-key conn)
+                                      (second candidate))))
+                (previous (client-conn-sent-row-frame conn))
+                (delta (when (and eligible
+                                  (equal (second previous)
+                                         (second candidate)))
+                         (nerimux/renderer:ansi-row-delta
+                          (third previous)
+                          (third candidate))))
+                (wire-frame (cond
+                              ((and delta (zerop (length delta))) nil)
+                              (delta (msg-frame delta))
+                              (t frame))))
+           (setf (client-conn-pending-render-state conn) nil)
+           (when wire-frame
+             (setf (client-conn-active-output-kind conn) :render
+                   (client-conn-active-output-frame conn) wire-frame
+                   (client-conn-active-row-frame-candidate conn)
+                   (when eligible candidate))
+             (nerimux/transport:start-frame-write writer wire-frame))
+           (if wire-frame :started :skipped)))
+        (t nil)))))
+
+(defun %complete-client-output-frame (conn)
+  (let ((kind (client-conn-active-output-kind conn))
+        (frame (client-conn-active-output-frame conn)))
+    (when (eq kind :control)
+      (decf (client-conn-control-frame-bytes conn) (length frame)))
+    (when (eq kind :render)
+      (setf (client-conn-sent-row-frame conn)
+            (client-conn-active-row-frame-candidate conn)))
+    (setf (client-conn-active-output-kind conn) nil
+          (client-conn-active-output-frame conn) nil
+          (client-conn-active-row-frame-candidate conn) nil)
+    (when (and (client-conn-close-after-write-p conn)
+               (not (%client-output-pending-p conn)))
+      (%drop-client conn))
+    :complete))
+
+(defun %advance-client-output (conn &key (max-bytes 65536))
+  (with-loop-safe-error (nil :on-error (%drop-client conn))
+    (unless (nerimux/transport:frame-writer-pending-p
+             (client-conn-frame-writer conn))
+      (%start-client-output-frame conn))
+    (multiple-value-prog1
+        (if (nerimux/transport:frame-writer-pending-p
+             (client-conn-frame-writer conn))
+            (multiple-value-bind (status bytes-written)
+                (nerimux/transport:write-frame-ready
+                 (client-conn-frame-writer conn)
+                 (client-conn-socket conn)
+                 :max-bytes max-bytes)
+              (when (eq status :complete)
+                (%complete-client-output-frame conn))
+              (values status bytes-written))
+            (values :idle 0))
+      (when (and (member conn *clients*)
+                 (client-conn-close-after-write-p conn)
+                 (not (%client-output-pending-p conn)))
+        (%drop-client conn)))))
+
+(defun %flush-client-output (&key drain)
+  (dolist (conn (copy-list *clients*))
+    (when (%client-output-pending-p conn)
+      (if drain
+          (loop while (and (member conn *clients*)
+                           (%client-output-pending-p conn))
+                do (multiple-value-bind (status bytes-written)
+                       (%advance-client-output conn)
+                     (when (or (member status '(:would-block :idle))
+                               (not (and (integerp bytes-written)
+                                         (plusp bytes-written))))
+                       (return))))
+          (%advance-client-output conn))))
+  nil)

@@ -217,7 +217,7 @@
 
 
 (describe "server-multi-worktree-command-suite"
-  (it "kill-command-replies-drops-client-and-forwards-success"
+  (it "kill-command-queues-reply-before-deferring-successful-close"
     (with-fake-session (s)
       (let ((conn (%make-test-conn))
             (requests nil)
@@ -228,20 +228,25 @@
               (lambda (session force)
                 (push (list session force) requests)
                 (values :ok nil)))
-             (nerimux::send-frame
-              (lambda (stream frame)
-                (push (list stream frame) frames)))
+             (nerimux::%queue-client-control-frame
+              (lambda (client frame)
+                (declare (ignore client))
+                (push frame frames)
+                :queued))
              (nerimux::%drop-client
-              (lambda (client)
-                (push client drops))))
+              (lambda (client &key bye after-flush)
+                (push (list client bye after-flush) drops))))
           (expect (eq :quit
                       (nerimux::%handle-client-ui-command
                        s conn :kill nil '("--force"))))
           (expect (equal (list (list s t)) requests))
-          (expect (equal (list conn) drops))
-          (expect (= 1 (length frames)))))))
+          (expect (equal (list (list conn nil t)) drops))
+          (multiple-value-bind (type payload)
+              (nerimux/protocol:decode-frame (first frames))
+            (expect (= nerimux/protocol:+msg-reply+ type))
+            (expect (string= "OK" (nerimux/protocol:decode-text payload))))))))
 
-  (it "kill-command-replies-denied-and-still-drops-client"
+  (it "kill-command-queues-denial-reply-and-defers-close"
     (with-fake-session (s)
       (let ((conn (%make-test-conn))
             (frames nil)
@@ -251,22 +256,23 @@
               (lambda (session force)
                 (declare (ignore session force))
                 (values :denied '("active clients remain"))))
-             (nerimux::send-frame
-              (lambda (stream frame)
-                (declare (ignore stream))
-                (push frame frames)))
+             (nerimux::%queue-client-control-frame
+              (lambda (client frame)
+                (declare (ignore client))
+                (push frame frames)
+                :queued))
              (nerimux::%drop-client
-              (lambda (client)
-                (push client drops))))
+              (lambda (client &key bye after-flush)
+                (push (list client bye after-flush) drops))))
           (expect (eq t
                       (nerimux::%handle-client-ui-command
                        s conn :kill nil nil)))
           (expect (= 1 (length frames)))
           (multiple-value-bind (type payload)
-              (nerimux/protocol::decode-frame (first frames))
-            (expect (= nerimux::+msg-reply+ type))
-            (expect (search "DENIED" (nerimux/protocol::decode-text payload))))
-          (expect (equal (list conn) drops))))))
+              (nerimux/protocol:decode-frame (first frames))
+            (expect (= nerimux/protocol:+msg-reply+ type))
+            (expect (search "DENIED" (nerimux/protocol:decode-text payload))))
+          (expect (equal (list (list conn nil t)) drops))))))
 
   (it "forwarded-kill-command-propagates-quit-disposition"
     (with-fake-session (s)

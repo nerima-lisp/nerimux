@@ -121,13 +121,21 @@
                 *workspace-cancel-reservations*)))
 
 (defstruct (client-conn (:constructor %make-client-conn))
-  "One attached client: its socket, a cached binary STREAM and FD, a private
-   keystroke STATE (so each client has independent prefix/copy-mode state), the
-   ROWS×COLS geometry it last reported, an optional command-stdin target pane,
-   its private UI state, cached frame, and private message log."
+  "One attached client: its socket and incremental frame state, FIFO control
+   frames, latest pending render state, private UI state, and row baseline."
   socket
   stream
   fd
+  (frame-reader (nerimux/transport:make-frame-reader))
+  (frame-writer (nerimux/transport:make-frame-writer))
+  (control-frame-head nil)
+  (control-frame-tail nil)
+  (control-frame-bytes 0 :type fixnum)
+  (pending-render-state nil)
+  (active-output-kind nil)
+  (active-output-frame nil)
+  (active-row-frame-candidate nil)
+  (close-after-write-p nil :type boolean)
   stdin-target
   (message-log nil)
   (rows 24 :type fixnum)
@@ -205,3 +213,76 @@
 
 (defvar *workspace-worktree-last-pane*
   (make-hash-table :test #'equal))
+
+(defconstant +max-client-control-frame-bytes+ (+ (* 64 1024 1024) 5))
+
+(defconstant +max-client-output-buffer-bytes+ (+ (* 128 1024 1024) 10))
+
+(defun %client-output-buffered-bytes (conn)
+  (+ (client-conn-control-frame-bytes conn)
+     (if (eq :render (client-conn-active-output-kind conn))
+         (length (client-conn-active-output-frame conn))
+         0)
+     (let ((pending (client-conn-pending-render-state conn)))
+       (if pending (length (first pending)) 0))))
+
+(defun %client-output-pending-p (conn)
+  (or (nerimux/transport:frame-writer-pending-p
+       (client-conn-frame-writer conn))
+      (client-conn-control-frame-head conn)
+      (client-conn-pending-render-state conn)))
+
+(defun %queue-client-control-frame (conn frame)
+  (let* ((frame-bytes (length frame))
+         (control-bytes (+ (client-conn-control-frame-bytes conn)
+                           frame-bytes))
+         (total-bytes (+ (%client-output-buffered-bytes conn)
+                         frame-bytes)))
+    (cond
+      ((client-conn-close-after-write-p conn) :closing)
+      ((or (> control-bytes +max-client-control-frame-bytes+)
+           (> total-bytes +max-client-output-buffer-bytes+))
+       (%drop-client conn)
+       :overflow)
+      (t
+       (let ((node (list frame)))
+         (if (client-conn-control-frame-tail conn)
+             (setf (cdr (client-conn-control-frame-tail conn)) node)
+             (setf (client-conn-control-frame-head conn) node))
+         (setf (client-conn-control-frame-tail conn) node
+               (client-conn-control-frame-bytes conn) control-bytes)
+         :queued)))))
+
+(defun %queue-client-render-state (conn frame candidate)
+  (unless (client-conn-close-after-write-p conn)
+    (let* ((pending (client-conn-pending-render-state conn))
+           (previous-bytes (if pending (length (first pending)) 0))
+           (total-bytes (+ (- (%client-output-buffered-bytes conn)
+                              previous-bytes)
+                           (length frame))))
+      (if (> total-bytes +max-client-output-buffer-bytes+)
+          (progn
+            (%drop-client conn)
+            :overflow)
+          (progn
+            (setf (client-conn-pending-render-state conn)
+                  (list frame candidate))
+            :queued)))))
+
+(defun %clear-client-output (conn)
+  (setf (client-conn-frame-reader conn)
+        (nerimux/transport:make-frame-reader)
+        (client-conn-frame-writer conn)
+        (nerimux/transport:make-frame-writer)
+        (client-conn-control-frame-head conn) nil
+        (client-conn-control-frame-tail conn) nil
+        (client-conn-control-frame-bytes conn) 0
+        (client-conn-pending-render-state conn) nil
+        (client-conn-active-output-kind conn) nil
+        (client-conn-active-output-frame conn) nil
+        (client-conn-active-row-frame-candidate conn) nil
+        (client-conn-close-after-write-p conn) nil
+        (client-conn-frame conn) nil
+        (client-conn-row-frame-candidate conn) nil
+        (client-conn-sent-row-frame conn) nil)
+  conn)

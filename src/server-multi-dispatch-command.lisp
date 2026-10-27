@@ -26,12 +26,13 @@
            (progn (%client-notify conn (%client-kill-denied-message descriptions))
                   t)))
       (t
-       (send-frame (client-conn-stream conn)
-                   (msg-reply
-                    (if (eq status :denied)
-                        (format nil "DENIED~{~%~A~}" descriptions)
-                        "OK")))
-       (%drop-client conn)
+       (%queue-client-control-frame
+        conn
+        (msg-reply
+         (if (eq status :denied)
+             (format nil "DENIED~{~%~A~}" descriptions)
+             "OK")))
+       (%drop-client conn :after-flush t)
        (if (eq status :ok)
            :quit
            t)))))

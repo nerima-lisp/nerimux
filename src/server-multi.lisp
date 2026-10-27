@@ -414,24 +414,30 @@ MODE is :MARK or :SETTLE; STALE-P applies when settling."
     (%mark-dirty)
     conn))
 
-(defun %drop-client (conn &key bye)
-  "Remove CONN, optionally send a bye frame, and close its socket.
+(defun %drop-client (conn &key bye after-flush)
+  "Remove CONN now, or after queued output drains, and close its socket.
 
-   This cleanup is idempotent and never propagates I/O errors: it runs from
-   error handlers and the server loop's unwind cleanup.  Unregister first,
-   then close with ABORT so a broken peer cannot prevent local fd release."
+   Immediate cleanup is idempotent and never propagates I/O errors: it runs from
+   error handlers and the server loop's unwind cleanup.  Graceful cleanup keeps
+   CONN registered until its queued reply and optional bye frame are written."
   (when (member conn *clients*)
-    (setf *clients* (remove conn *clients*))
-    (%cancel-client-workspace-prune conn)
-    (setf (client-conn-ui-prefix-p conn) nil)
-    (when (and bye (streamp (client-conn-stream conn)))
-      (handler-case
-          (send-frame (client-conn-stream conn) (msg-bye))
-        (sb-ext:timeout () nil)
-        (sb-bsd-sockets:socket-error () nil)
-        (stream-error () nil)))
-    (let ((socket (client-conn-socket conn)))
-      (when socket
-        (handler-case
-            (close-socket socket :abort t)
-          (peer-io-failure () nil))))))
+    (if (or bye after-flush)
+        (progn
+          (when (and bye (not (client-conn-close-after-write-p conn)))
+            (unless (eq :queued
+                        (%queue-client-control-frame conn (msg-bye)))
+              (return-from %drop-client nil)))
+          (setf (client-conn-close-after-write-p conn) t)
+          (unless (%client-output-pending-p conn)
+            (%drop-client conn))
+          :closing)
+        (progn
+          (setf *clients* (remove conn *clients*))
+          (%cancel-client-workspace-prune conn)
+          (setf (client-conn-ui-prefix-p conn) nil)
+          (%clear-client-output conn)
+          (let ((socket (client-conn-socket conn)))
+            (when socket
+              (handler-case
+                  (close-socket socket :abort t)
+                (peer-io-failure () nil))))))))

@@ -180,7 +180,8 @@
                   :quit)))
              (nerimux::%drop-client
               (lambda (conn &key bye)
-                (push (list :drop conn bye) events))))
+                (push (list :drop conn bye) events)
+                (setf nerimux::*clients* (remove conn nerimux::*clients*)))))
           (expect (null (nerimux::%run-multi-server-loop :listener :session)))
           (expect (null nerimux::*running*))
           (expect (= 1 (count :iterate events)))
@@ -195,7 +196,34 @@
                                     (and (consp event)
                                          (eq :drop (first event))
                                          (eq conn-b (second event))))
-                                  events)))))))) (it "run-multi-server-loop-continues-after-nil-iteration"
+                                  events)))))))
+  (it "run-multi-server-loop-clears-client-after-blocked-output-drain"
+    (let* ((conn (%make-test-conn))
+           (advance-calls 0)
+           (nerimux::*clients* (list conn))
+           (nerimux::*running* t))
+      (nerimux::%queue-client-control-frame
+       conn (nerimux/protocol:msg-reply "pending"))
+      (with-stubbed-fdefinition
+          ((nerimux::%multi-serve-iteration
+            (lambda (listener session)
+              (declare (ignore listener session))
+              :quit))
+           (nerimux::%advance-client-output
+            (lambda (client &key max-bytes)
+              (declare (ignore client max-bytes))
+              (incf advance-calls)
+              (values :would-block 0))))
+        (expect (null (nerimux::%run-multi-server-loop :listener :session))))
+      (expect (= 1 advance-calls))
+      (expect (null nerimux::*clients*))
+      (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))
+      (expect (null (nerimux::client-conn-control-frame-head conn)))
+      (expect (null (nerimux::client-conn-pending-render-state conn)))
+      (expect (null (nerimux::client-conn-active-output-frame conn)))
+      (expect (not (nerimux/transport:frame-writer-pending-p
+                    (nerimux::client-conn-frame-writer conn))))))
+) (it "run-multi-server-loop-continues-after-nil-iteration"
     (let ((calls 0)
           (nerimux::*running* t))
       (let ((nerimux::*clients* nil))
@@ -234,31 +262,193 @@
           (expect
            (nerimux/workspace-model:worktree-waiting-host-notified-p worktree)))))
 
-  (it "broadcast-continues-after-one-client-frame-write-fails"
-      (with-fake-session (session)
-        (let* ((conn-a (%make-test-conn))
-               (conn-b (%make-test-conn))
-               (bad-stream (make-string-output-stream))
-               (good-stream (make-string-output-stream))
-               (sent-streams nil)
-               (nerimux::*clients* (list conn-a conn-b))
-               (nerimux::*dirty* t))
-          (setf (nerimux::client-conn-stream conn-a) bad-stream
-                (nerimux::client-conn-stream conn-b) good-stream)
-          (with-stubbed-fdefinition
-              ((nerimux::%render-client-frame
-                 (lambda (session conn)
-                   (declare (ignore session conn))
-                   :frame))
-               (nerimux/transport:send-frame
-                 (lambda (stream frame)
-                   (declare (ignore frame))
-                   (push stream sent-streams)
-                   (when (eq stream bad-stream)
-                     (error 'stream-error :stream stream)))))
-            (expect (finishes (nerimux::%broadcast-frame session))))
-          (expect (member good-stream sent-streams :test #'eq))
-          (expect (null (member conn-a nerimux::*clients* :test #'eq))))))
+  (it "broadcast-queues-render-state-for-each-client"
+    (with-fake-session (session)
+      (let* ((conn-a (%make-test-conn))
+             (conn-b (%make-test-conn))
+             (frame (nerimux/protocol:msg-frame "screen"))
+             (nerimux::*clients* (list conn-a conn-b))
+             (nerimux::*dirty* t))
+        (with-stubbed-fdefinition
+            ((nerimux::%render-client-frame
+              (lambda (ignored-session ignored-conn)
+                (declare (ignore ignored-session ignored-conn))
+                frame)))
+          (expect (finishes (nerimux::%broadcast-frame session))))
+        (expect (eq frame
+                    (first (nerimux::client-conn-pending-render-state conn-a))))
+        (expect (eq frame
+                    (first (nerimux::client-conn-pending-render-state conn-b))))
+        (expect (= 2 (length nerimux::*clients*))))))
+
+  (it "client-output-writes-control-frames-in-fifo-order"
+    (let* ((conn (%make-test-conn))
+           (first-frame (nerimux/protocol:msg-reply "first"))
+           (second-frame (nerimux/protocol:msg-reply "second"))
+           (sent (make-array 0 :element-type '(unsigned-byte 8)))
+           (nerimux::*clients* (list conn)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame conn first-frame)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame conn second-frame)))
+      (with-stubbed-fdefinition
+          ((sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket dontwait nosignal))
+              (setf sent
+                    (concatenate '(vector (unsigned-byte 8))
+                                 sent
+                                 (subseq buffer 0 length)))
+              length)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn)
+          (expect (eq :complete status))
+          (expect (= (length first-frame) bytes-written)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn)
+          (expect (eq :complete status))
+          (expect (= (length second-frame) bytes-written))))
+      (expect (equalp (concatenate '(vector (unsigned-byte 8))
+                                   first-frame second-frame)
+                      sent))
+      (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))))
+  (it "client-output-control-queue-overflow-drops-and-clears-client"
+    (let* ((conn (%make-test-conn))
+           (in-flight-frame (nerimux/protocol:msg-reply "in-flight"))
+           (queued-frame (nerimux/protocol:msg-reply "queued"))
+           (overflow-frame (nerimux/protocol:msg-reply "overflow"))
+           (writer (nerimux::client-conn-frame-writer conn))
+           (nerimux::*clients* (list conn)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame conn in-flight-frame)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-control-frame conn queued-frame)))
+      (expect (eq :started
+                  (nerimux::%start-client-output-frame conn)))
+      (expect (nerimux/transport:frame-writer-pending-p writer))
+      (expect (nerimux::client-conn-control-frame-head conn))
+      (setf (nerimux::client-conn-control-frame-bytes conn)
+            nerimux::+max-client-control-frame-bytes+)
+      (expect (eq :overflow
+                  (nerimux::%queue-client-control-frame conn overflow-frame)))
+      (expect (null nerimux::*clients*))
+      (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))
+      (expect (null (nerimux::client-conn-control-frame-head conn)))
+      (expect (null (nerimux::client-conn-control-frame-tail conn)))
+      (expect (null (nerimux::client-conn-active-output-kind conn)))
+      (expect (null (nerimux::client-conn-active-output-frame conn)))
+      (expect (not (eq writer (nerimux::client-conn-frame-writer conn))))
+      (expect (not (nerimux/transport:frame-writer-pending-p
+                    (nerimux::client-conn-frame-writer conn))))))
+
+  (it "client-output-coalesces-unstarted-render-states"
+    (let* ((conn (%make-test-conn))
+           (first-frame (nerimux/protocol:msg-frame "first"))
+           (second-frame (nerimux/protocol:msg-frame "second"))
+           (latest-frame (nerimux/protocol:msg-frame "latest")))
+      (expect (eq :queued
+                  (nerimux::%queue-client-render-state conn first-frame nil)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-render-state conn second-frame nil)))
+      (expect (eq :queued
+                  (nerimux::%queue-client-render-state conn latest-frame nil)))
+      (expect (eq latest-frame
+                  (first (nerimux::client-conn-pending-render-state conn))))
+      (expect (null (nerimux::client-conn-active-output-kind conn)))
+      (expect (= (length latest-frame)
+                 (nerimux::%client-output-buffered-bytes conn)))))
+
+  (it "client-output-advances-row-baseline-only-after-frame-completes"
+    (let* ((conn (%make-test-conn))
+           (first-frame (nerimux/protocol:msg-frame "first"))
+           (second-frame (nerimux/protocol:msg-frame "second"))
+           (key (nerimux::%client-row-frame-key conn))
+           (first-candidate (list first-frame key :first-snapshot))
+           (second-candidate (list second-frame key :second-snapshot))
+           (sent (make-array 0 :element-type '(unsigned-byte 8)))
+           (calls 0))
+      (expect (eq :queued
+                  (nerimux::%queue-client-render-state
+                   conn first-frame first-candidate)))
+      (with-stubbed-fdefinition
+          ((sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket dontwait nosignal))
+              (incf calls)
+              (setf sent
+                    (concatenate '(vector (unsigned-byte 8))
+                                 sent
+                                 (subseq buffer 0 length)))
+              (if (= calls 1) 2 length))))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn :max-bytes 2)
+          (expect (eq :pending status))
+          (expect (= 2 bytes-written))
+          (expect (null (nerimux::client-conn-sent-row-frame conn))))
+        (expect (eq first-frame
+                    (nerimux::client-conn-active-output-frame conn)))
+        (expect (eq :queued
+                    (nerimux::%queue-client-render-state
+                     conn second-frame second-candidate)))
+        (multiple-value-bind (status bytes-written)
+            (nerimux::%advance-client-output conn)
+          (expect (eq :complete status))
+          (expect (= (- (length first-frame) 2) bytes-written)))
+        (expect (eq first-candidate
+                    (nerimux::client-conn-sent-row-frame conn)))
+        (expect (eq second-frame
+                    (first (nerimux::client-conn-pending-render-state conn))))
+        (expect (equalp first-frame sent)))))
+
+  (it "client-output-fatal-partial-write-drops-and-clears-client-state"
+  (let* ((conn (%make-test-conn))
+         (first-frame (nerimux/protocol:msg-reply "first"))
+         (second-frame (nerimux/protocol:msg-reply "second"))
+         (calls 0)
+         (nerimux::*clients* (list conn)))
+    (nerimux::%queue-client-control-frame conn first-frame)
+    (nerimux::%queue-client-control-frame conn second-frame)
+    (with-stubbed-fdefinition
+        ((sb-bsd-sockets:socket-send
+          (lambda (socket buffer length &key dontwait nosignal)
+            (declare (ignore socket buffer length dontwait nosignal))
+            (incf calls)
+            (case calls
+              (1 2)
+              (2 (error (make-condition 'sb-bsd-sockets:socket-error
+                                        :errno sb-posix:epipe)))
+              (otherwise (error "unexpected socket-send call"))))))
+      (multiple-value-bind (status bytes-written)
+          (nerimux::%advance-client-output conn :max-bytes 2)
+        (expect (eq :pending status))
+        (expect (= 2 bytes-written)))
+      (expect (null (nerimux::%advance-client-output conn :max-bytes 2)))
+      (expect (null nerimux::*clients*))
+      (expect (zerop (nerimux::client-conn-control-frame-bytes conn)))
+      (expect (null (nerimux::client-conn-control-frame-head conn)))
+      (expect (null (nerimux::client-conn-pending-render-state conn)))
+      (expect (null (nerimux::client-conn-active-output-frame conn)))
+      (expect (not (nerimux/transport:frame-writer-pending-p
+                    (nerimux::client-conn-frame-writer conn))))
+      (expect (= 2 calls)))))
+  (it "client-output-render-overflow-drops-and-clears-client"
+    (let* ((conn (%make-test-conn))
+           (frame (nerimux/protocol:msg-frame "render"))
+           (nerimux::*clients* (list conn)))
+      (setf (nerimux::client-conn-pending-render-state conn)
+            (list #() nil))
+      (with-stubbed-fdefinition
+          ((nerimux::%client-output-buffered-bytes
+            (lambda (client)
+              (declare (ignore client))
+              nerimux::+max-client-output-buffer-bytes+)))
+        (expect (eq :overflow
+                    (nerimux::%queue-client-render-state conn frame nil))))
+      (expect (null nerimux::*clients*))
+      (expect (null (nerimux::client-conn-pending-render-state conn)))
+      (expect (null (nerimux::client-conn-control-frame-head conn)))
+      (expect (not (nerimux/transport:frame-writer-pending-p
+                    (nerimux::client-conn-frame-writer conn))))))
 
   (it "sends one host notification to every unfocused client"
       (multiple-value-bind (session worktree agent)
@@ -304,23 +494,45 @@
           (expect (null notifications))
           (expect
            (nerimux/workspace-model:worktree-waiting-host-notified-p worktree)))))
-  (it "encodes the host notification as a Kitty OSC 99 notification frame"
-      (let ((frames nil))
-        (with-stubbed-fdefinition
-            ((nerimux/transport:send-frame
-              (lambda (stream frame)
-                (declare (ignore stream))
-                (push frame frames))))
-          (nerimux::%send-host-notification nil "nerimux" "approval required"))
-        (expect (= 1 (length frames)))
-        (multiple-value-bind (type payload next)
-            (nerimux/protocol:decode-frame (first frames))
-          (expect (= nerimux/protocol:+msg-notification+ type))
-          (expect (= (length (first frames)) next))
-          (let ((text (cl-codec-kit:octets-to-string payload :encoding :utf-8)))
-            (expect (search (format nil "~C]99;i=nerimux:d=0:p=title;nerimux~C\\"
-                                     #\Escape #\Escape)
-                            text))
-            (expect (search (format nil "~C]99;i=nerimux:d=1:p=body;approval required~C\\"
-                                     #\Escape #\Escape)
-                            text)))))))
+  (it "encodes host notifications and routes client output through its queue"
+  (let* ((conn (%make-test-conn))
+         (stream :client-stream)
+         (nerimux::*clients* (list conn))
+         (queued-frame nil))
+    (setf (nerimux::client-conn-stream conn) stream)
+    (nerimux::%send-host-notification stream "nerimux" "approval required")
+    (setf queued-frame
+          (first (nerimux::client-conn-control-frame-head conn)))
+    (expect queued-frame)
+    (multiple-value-bind (type payload next)
+        (nerimux/protocol:decode-frame queued-frame)
+      (expect (= nerimux/protocol:+msg-notification+ type))
+      (expect (= (length queued-frame) next))
+      (let ((text (cl-codec-kit:octets-to-string payload :encoding :utf-8)))
+        (expect (search (format nil "~C]99;i=nerimux:d=0:p=title;nerimux~C\\"
+                                #\Escape #\Escape)
+                        text))
+        (expect (search (format nil "~C]99;i=nerimux:d=1:p=body;approval required~C\\"
+                                #\Escape #\Escape)
+                        text))))
+    (expect (= (length queued-frame)
+               (nerimux::client-conn-control-frame-bytes conn))))
+  (let ((frames nil))
+    (with-stubbed-fdefinition
+        ((nerimux/transport:send-frame
+          (lambda (stream frame)
+            (declare (ignore stream))
+            (push frame frames))))
+      (nerimux::%send-host-notification nil "nerimux" "approval required"))
+    (expect (= 1 (length frames)))
+    (multiple-value-bind (type payload next)
+        (nerimux/protocol:decode-frame (first frames))
+      (expect (= nerimux/protocol:+msg-notification+ type))
+      (expect (= (length (first frames)) next))
+      (let ((text (cl-codec-kit:octets-to-string payload :encoding :utf-8)))
+        (expect (search (format nil "~C]99;i=nerimux:d=0:p=title;nerimux~C\\"
+                                #\Escape #\Escape)
+                        text))
+        (expect (search (format nil "~C]99;i=nerimux:d=1:p=body;approval required~C\\"
+                                #\Escape #\Escape)
+                        text)))))))

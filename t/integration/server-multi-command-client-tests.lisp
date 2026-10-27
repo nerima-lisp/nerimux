@@ -120,12 +120,17 @@
                 (ignore-errors (nerimux/net:close-socket socket)))))))))
 
 
-  (it "last-client-detach-leaves-running-true"
+  (it "last-client-detach-queues-bye-and-leaves-server-running"
     (let* ((conn (nerimux::%make-client-conn))
            (nerimux::*clients* (list conn))
            (nerimux::*running* t))
       (expect (null (nerimux::%apply-client-disposition :drop conn)))
-      (expect (null nerimux::*clients*))
+      (expect (member conn nerimux::*clients* :test #'eq))
+      (expect (nerimux::client-conn-close-after-write-p conn))
+      (expect (= nerimux/protocol:+msg-bye+
+                 (first (multiple-value-list
+                         (nerimux/protocol:decode-frame
+                          (first (nerimux::client-conn-control-frame-head conn)))))))
       (expect nerimux::*running* :to-be-truthy)))
 
   (it "quit-disposition-is-returned-to-the-server-loop"
@@ -146,7 +151,9 @@
               (nerimux::%add-client server1)
               (nerimux::%add-client server2)
               (setf nerimux::*dirty* t)
-              (nerimux::%broadcast-frame s)
+              (progn
+                (nerimux::%broadcast-frame s)
+                (nerimux::%flush-client-output :drain t))
               (dolist (client (list client1 client2))
                 (let ((ready (nerimux/pty:select-fds
                               (list (nerimux/net:socket-fd client)) 1000000)))
@@ -180,7 +187,9 @@
               (nerimux::%add-client server1)
               (nerimux::%add-client server2)
               (setf nerimux::*dirty* nil)
-              (nerimux::%broadcast-frame s)
+              (progn
+                (nerimux::%broadcast-frame s)
+                (nerimux::%flush-client-output :drain t))
               (dolist (client (list client1 client2))
                 (let ((received nil))
                   (let ((ready (nerimux/pty:select-fds
@@ -231,7 +240,9 @@
                                 (cl-codec-kit:string-to-octets
                                  "client-two" :encoding :utf-8))
                      (setf nerimux::*dirty* t)
-                     (nerimux::%broadcast-frame s)
+                     (progn
+                       (nerimux::%broadcast-frame s)
+                       (nerimux::%flush-client-output :drain t))
                      (flet ((read-frame-text (client)
                               (let ((ready (nerimux/pty:select-fds
                                             (list (nerimux/net:socket-fd client))
@@ -294,7 +305,12 @@
                                     (msg-key (vector (char-code #\d)))))
                                :to-be-truthy)
                        (nerimux::%apply-client-disposition :drop conn1)
-                       (expect (null nerimux::*clients*) :to-be-truthy)
+                       (progn
+                         (nerimux::%flush-client-output)
+                         (expect (member conn1 nerimux::*clients*)
+                                 :to-be-truthy)
+                         (nerimux::%flush-client-output)
+                         (expect (null nerimux::*clients*) :to-be-truthy))
                        (expect (eq pane (window-active-pane window))
                                :to-be-truthy)
                        (setf client2 (nerimux/net:connect-to path)
