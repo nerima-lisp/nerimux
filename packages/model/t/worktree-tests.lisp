@@ -275,3 +275,103 @@
           (it "uses empty components when generating a key from absent values"
               (expect
                (equal "||" (nerimux/workspace-model::worktree-key nil nil nil)))))
+(describe "worktree status transitions"
+  (it "retains the snapshot and previous failure while loading"
+    (let* ((snapshot (list :head "old"))
+           (worktree (nerimux/workspace-model:make-worktree :status snapshot)))
+      (nerimux/workspace-model:worktree-transition-status
+       worktree :read-error :error-message "git status failed")
+      (expect (eq :stale
+                  (nerimux/workspace-model:worktree-status-state worktree)))
+      (expect (eq snapshot (nerimux/workspace-model:worktree-status worktree)))
+      (expect (equal "git status failed"
+                     (nerimux/workspace-model:worktree-status-error-message worktree)))
+      (expect (nerimux/workspace-model:worktree-read-error-p worktree))
+      (nerimux/workspace-model:worktree-transition-status worktree :loading)
+      (expect (eq :loading
+                  (nerimux/workspace-model:worktree-status-state worktree)))
+      (expect (eq snapshot (nerimux/workspace-model:worktree-status worktree)))
+      (expect (equal "git status failed"
+                     (nerimux/workspace-model:worktree-status-error-message worktree)))
+      (expect (nerimux/workspace-model:worktree-read-error-p worktree))
+      (let ((next-snapshot (list :head "new")))
+        (nerimux/workspace-model:worktree-transition-status
+         worktree :ready :snapshot next-snapshot :snapshot-supplied-p t)
+        (expect (eq :ready
+                    (nerimux/workspace-model:worktree-status-state worktree)))
+        (expect (eq next-snapshot
+                    (nerimux/workspace-model:worktree-status worktree)))
+        (expect (null
+                 (nerimux/workspace-model:worktree-status-error-message worktree)))
+        (expect (not (nerimux/workspace-model:worktree-read-error-p worktree))))))
+  (it "maps failures according to whether a snapshot exists"
+    (let ((empty (nerimux/workspace-model:make-worktree))
+          (with-snapshot
+            (nerimux/workspace-model:make-worktree :status (list :head "old"))))
+      (nerimux/workspace-model:worktree-transition-status
+       empty :read-error :error-message "first read failed")
+      (nerimux/workspace-model:worktree-transition-status
+       with-snapshot :read-error :error-message "refresh failed")
+      (expect (eq :read-error
+                  (nerimux/workspace-model:worktree-status-state empty)))
+      (expect (null (nerimux/workspace-model:worktree-status empty)))
+      (expect (eq :stale
+                  (nerimux/workspace-model:worktree-status-state with-snapshot)))
+      (expect (nerimux/workspace-model:worktree-read-error-p empty))
+      (expect (nerimux/workspace-model:worktree-read-error-p with-snapshot))))
+  (it "resets status failure data when unloaded"
+    (let ((worktree
+            (nerimux/workspace-model:make-worktree :status (list :head "old"))))
+      (nerimux/workspace-model:worktree-transition-status
+       worktree :read-error :error-message "refresh failed")
+      (nerimux/workspace-model:worktree-transition-status worktree :unloaded)
+      (expect (eq :unloaded
+                  (nerimux/workspace-model:worktree-status-state worktree)))
+      (expect (null (nerimux/workspace-model:worktree-status worktree)))
+      (expect (null
+               (nerimux/workspace-model:worktree-status-error-message worktree)))
+      (expect (not (nerimux/workspace-model:worktree-read-error-p worktree)))))
+  (it "supports legacy and detailed status constructor values"
+    (let ((legacy-error (nerimux/workspace-model:make-worktree :read-error-p t))
+          (legacy-stale
+            (nerimux/workspace-model:make-worktree
+             :status (list :head "old") :read-error-p t))
+          (detailed
+            (nerimux/workspace-model:make-worktree
+             :status-state :read-error
+             :status-error-message "first read failed"
+             :numstat-state :failed
+             :numstat-error-message "numstat failed"
+             :stashes-error-message "stash failed")))
+      (expect (eq :read-error
+                  (nerimux/workspace-model:worktree-status-state legacy-error)))
+      (expect (eq :stale
+                  (nerimux/workspace-model:worktree-status-state legacy-stale)))
+      (expect (equal "first read failed"
+                     (nerimux/workspace-model:worktree-status-error-message detailed)))
+      (expect (eq :failed
+                  (nerimux/workspace-model:worktree-numstat-state detailed)))
+      (expect (equal "numstat failed"
+                     (nerimux/workspace-model:worktree-numstat-error-message detailed)))
+      (expect (equal "stash failed"
+                     (nerimux/workspace-model:worktree-stashes-error-message detailed)))))
+  (it "copies a previous failure into loading state"
+    (let* ((snapshot (list :head "old"))
+           (worktree (nerimux/workspace-model:make-worktree))
+           (fresh (nerimux/workspace-model:make-worktree)))
+      (nerimux/workspace-model:worktree-transition-status
+       worktree :loading
+       :snapshot snapshot
+       :snapshot-supplied-p t
+       :error-message "previous failure")
+      (nerimux/workspace-model:worktree-transition-status fresh :loading)
+      (expect (eq :loading
+                  (nerimux/workspace-model:worktree-status-state worktree)))
+      (expect (eq snapshot (nerimux/workspace-model:worktree-status worktree)))
+      (expect (equal "previous failure"
+                     (nerimux/workspace-model:worktree-status-error-message worktree)))
+      (expect (nerimux/workspace-model:worktree-read-error-p worktree))
+      (expect (eq :loading
+                  (nerimux/workspace-model:worktree-status-state fresh)))
+      (expect (null (nerimux/workspace-model:worktree-status-error-message fresh)))
+      (expect (not (nerimux/workspace-model:worktree-read-error-p fresh))))))

@@ -41,15 +41,16 @@
                      #:repository-worktrees
                      #:worktree
                      #:worktree-additions
-                     #:worktree-ahead
                      #:worktree-agent-pane
-                     #:worktree-completed-p
-                     #:worktree-complete
+                     #:worktree-ahead
                      #:worktree-attention-p
                      #:worktree-behind
                      #:worktree-branch
                      #:worktree-changed-files
+                     #:worktree-clear-waiting
                      #:worktree-commits-state
+                     #:worktree-complete
+                     #:worktree-completed-p
                      #:worktree-conflict-p
                      #:worktree-deletions
                      #:worktree-dirty-p
@@ -57,29 +58,28 @@
                      #:worktree-id
                      #:worktree-key
                      #:worktree-locked-p
-                     #:worktree-missing-p
-                     #:worktree-read-error-p
+                     #:worktree-mark-waiting
+                     #:worktree-mark-waiting-host-notified
+                     #:worktree-missing-p #:worktree-numstat-error-message #:worktree-numstat-state
                      #:worktree-p
                      #:worktree-panes
                      #:worktree-path
                      #:worktree-prunable-p
                      #:worktree-prune-classification
+                     #:worktree-read-error-p
                      #:worktree-recent-commits
                      #:worktree-repository
                      #:worktree-staged-files
-                     #:worktree-stashes
+                     #:worktree-stashes #:worktree-stashes-error-message
                      #:worktree-stashes-state
-                     #:worktree-status
+                     #:worktree-status #:worktree-status-error-message #:worktree-status-state #:worktree-transition-status
                      #:worktree-unmerged-files
                      #:worktree-unstaged-files
                      #:worktree-untracked-files
-                     #:worktree-waiting-p
-                     #:worktree-waiting-time
-                     #:worktree-waiting-message
                      #:worktree-waiting-host-notified-p
-                     #:worktree-mark-waiting
-                     #:worktree-clear-waiting
-                     #:worktree-mark-waiting-host-notified))
+                     #:worktree-waiting-message
+                     #:worktree-waiting-p
+                     #:worktree-waiting-time))
 
 (defpackage #:nerimux/pane
             (:use #:cl

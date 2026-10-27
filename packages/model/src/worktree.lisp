@@ -4,11 +4,15 @@
             (:constructor %make-worktree
                 (&key id repository path branch head status panes dirty-p
                       conflict-p ahead behind locked-p prunable-p
-                      missing-p read-error-p changed-files additions deletions
-                      recent-commits commits-state
+                      missing-p
+                      ((:read-error-p %read-error-p) nil)
+                      ((:status-state %status-state) :unloaded)
+                      ((:status-error-message %status-error-message) nil)
+                      changed-files additions deletions numstat-state
+                      numstat-error-message recent-commits commits-state
                       staged-files unstaged-files untracked-files
-                      unmerged-files stashes stashes-state completed-p agent-pane
-                      waiting-p waiting-time waiting-message
+                      unmerged-files stashes stashes-state stashes-error-message
+                      completed-p agent-pane waiting-p waiting-time waiting-message
                       waiting-host-notified-p)))
   (id "" :type string)
   (repository nil)
@@ -16,6 +20,9 @@
   (branch nil)
   (head nil)
   (status nil)
+  (%status-state :unloaded
+                 :type (member :unloaded :loading :ready :read-error :stale))
+  (%status-error-message nil)
   (panes nil :type list)
   (completed-p nil :type boolean)
   (agent-pane nil)
@@ -26,10 +33,12 @@
   (locked-p nil :type boolean)
   (prunable-p nil :type boolean)
   (missing-p nil :type boolean)
-  (read-error-p nil :type boolean)
+  (%read-error-p nil :type boolean)
   (changed-files nil :type list)
   (additions 0 :type integer)
   (deletions 0 :type integer)
+  (numstat-state :unloaded :type (member :unloaded :ready :failed))
+  (numstat-error-message nil)
   (recent-commits nil :type list)
   (commits-state nil)
   (staged-files nil :type list)
@@ -38,6 +47,7 @@
   (unmerged-files nil :type list)
   (stashes nil :type list)
   (stashes-state nil)
+  (stashes-error-message nil)
   (waiting-p nil :type boolean)
   (waiting-time nil)
   (waiting-message "" :type string)
@@ -49,13 +59,53 @@
           (%model-string path)
           (%model-string branch)
           (%model-string head)))
+(progn
+  (defun worktree-status-state (worktree)
+    (worktree-%status-state worktree))
+  (defun worktree-status-error-message (worktree)
+    (worktree-%status-error-message worktree))
+  (defun worktree-read-error-p (worktree)
+    (worktree-%read-error-p worktree))
+  (defun worktree-transition-status (worktree state
+                                    &key snapshot (snapshot-supplied-p nil)
+                                      (error-message nil error-message-supplied-p))
+    (case state
+      (:unloaded
+       (setf (worktree-status worktree) nil
+             (worktree-%status-state worktree) :unloaded
+             (worktree-%status-error-message worktree) nil
+             (worktree-%read-error-p worktree) nil))
+      (:loading
+       (when snapshot-supplied-p
+         (setf (worktree-status worktree) snapshot))
+       (when error-message-supplied-p
+         (setf (worktree-%status-error-message worktree) error-message))
+       (setf (worktree-%status-state worktree) :loading)
+       (when error-message
+         (setf (worktree-%read-error-p worktree) t)))
+      (:ready
+       (when snapshot-supplied-p
+         (setf (worktree-status worktree) snapshot))
+       (setf (worktree-%status-state worktree) :ready
+             (worktree-%status-error-message worktree) nil
+             (worktree-%read-error-p worktree) nil))
+      ((:read-error :stale)
+       (setf (worktree-%status-state worktree)
+             (if (worktree-status worktree) :stale :read-error)
+             (worktree-%status-error-message worktree) error-message
+             (worktree-%read-error-p worktree) t))
+      (otherwise
+       (error "Invalid worktree status state: ~S" state)))
+    worktree))
 
 (defun make-worktree (&key id
                            repository
                            path
                            branch
                            head
-                           status
+                           (status nil status-supplied-p)
+                           (status-state nil status-state-supplied-p)
+                           (status-error-message nil)
                            panes
                            dirty-p
                            conflict-p
@@ -64,10 +114,12 @@
                            locked-p
                            prunable-p
                            missing-p
-                           read-error-p
+                           (read-error-p nil read-error-p-supplied-p)
                            changed-files
                            (additions 0)
                            (deletions 0)
+                           (numstat-state :unloaded)
+                           numstat-error-message
                            recent-commits
                            commits-state
                            staged-files
@@ -76,79 +128,111 @@
                            unmerged-files
                            stashes
                            stashes-state
+                           stashes-error-message
                            completed-p
                            agent-pane
                            waiting-p
                            waiting-time
                            waiting-message
                            waiting-host-notified-p)
-  (let ((path-string (%model-string path)))
-    (%make-worktree :id
-                    (or id (worktree-key path-string branch head))
-                    :repository
-                    repository
-                    :path
-                    path-string
-                    :branch
-                    branch
-                    :head
-                    head
-                    :status
-                    status
-                    :panes
-                    (copy-list panes)
-                    :completed-p
-                    (not (null completed-p))
-                    :agent-pane
-                    agent-pane
-                    :dirty-p
-                    (not (null dirty-p))
-                    :conflict-p
-                    (not (null conflict-p))
-                    :ahead
-                    ahead
-                    :behind
-                    behind
-                    :locked-p
-                    (not (null locked-p))
-                    :prunable-p
-                    (not (null prunable-p))
-                    :missing-p
-                    (not (null missing-p))
-                    :read-error-p
-                    (not (null read-error-p))
-                    :changed-files
-                    (copy-list changed-files)
-                    :additions
-                    additions
-                    :deletions
-                    deletions
-                    :recent-commits
-                    (copy-list recent-commits)
-                    :commits-state
-                    commits-state
-                    :staged-files
-                    (copy-list staged-files)
-                    :unstaged-files
-                    (copy-list unstaged-files)
-                    :untracked-files
-                    (copy-list untracked-files)
-                    :unmerged-files
-                    (copy-list unmerged-files)
-                    :stashes
-                    (copy-list stashes)
-                    :stashes-state
-                    stashes-state
-                    :waiting-p
-                    (not (null waiting-p))
-                    :waiting-time
-                    waiting-time
-                    :waiting-message
-                    (or waiting-message "")
-                    :waiting-host-notified-p
-                    (if (null waiting-host-notified-p)
-                        (not waiting-p)
-                        waiting-host-notified-p))))
+  (let* ((path-string (%model-string path))
+         (initial-status-state
+           (if status-state-supplied-p
+               status-state
+               (cond ((and read-error-p-supplied-p read-error-p) :read-error)
+                     (status :ready)
+                     (t :unloaded))))
+         (initial-read-error-p
+           (if read-error-p-supplied-p
+               (not (null read-error-p))
+               (not
+                (null
+                 (or (member initial-status-state (list :read-error :stale)
+                             :test (lambda (left right) (eq left right)))
+                     (and (eq initial-status-state :loading)
+                          status-error-message))))))
+         (worktree
+           (%make-worktree :id
+                           (or id (worktree-key path-string branch head))
+                           :repository
+                           repository
+                           :path
+                           path-string
+                           :branch
+                           branch
+                           :head
+                           head
+                           :status
+                           status
+                           :status-state
+                           initial-status-state
+                           :status-error-message
+                           status-error-message
+                           :panes
+                           (copy-list panes)
+                           :completed-p
+                           (not (null completed-p))
+                           :agent-pane
+                           agent-pane
+                           :dirty-p
+                           (not (null dirty-p))
+                           :conflict-p
+                           (not (null conflict-p))
+                           :ahead
+                           ahead
+                           :behind
+                           behind
+                           :locked-p
+                           (not (null locked-p))
+                           :prunable-p
+                           (not (null prunable-p))
+                           :missing-p
+                           (not (null missing-p))
+                           :read-error-p
+                           initial-read-error-p
+                           :changed-files
+                           (copy-list changed-files)
+                           :additions
+                           additions
+                           :deletions
+                           deletions
+                           :numstat-state
+                           numstat-state
+                           :numstat-error-message
+                           numstat-error-message
+                           :recent-commits
+                           (copy-list recent-commits)
+                           :commits-state
+                           commits-state
+                           :staged-files
+                           (copy-list staged-files)
+                           :unstaged-files
+                           (copy-list unstaged-files)
+                           :untracked-files
+                           (copy-list untracked-files)
+                           :unmerged-files
+                           (copy-list unmerged-files)
+                           :stashes
+                           (copy-list stashes)
+                           :stashes-state
+                           stashes-state
+                           :stashes-error-message
+                           stashes-error-message
+                           :waiting-p
+                           (not (null waiting-p))
+                           :waiting-time
+                           waiting-time
+                           :waiting-message
+                           (or waiting-message "")
+                           :waiting-host-notified-p
+                           (if (null waiting-host-notified-p)
+                               (not waiting-p)
+                               waiting-host-notified-p))))
+    (worktree-transition-status worktree
+                                initial-status-state
+                                :snapshot status
+                                :snapshot-supplied-p status-supplied-p
+                                :error-message status-error-message)))
 
 (defun worktree-mark-waiting (worktree message &optional (now (get-universal-time)))
   (when worktree
