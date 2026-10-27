@@ -631,6 +631,11 @@
   (defun %refresh-pending-client-render-frames
     (session &optional (now (get-internal-real-time)))
     "Replace a stale, unstarted render after input while respecting the render rate."
+    (when (and *clients*
+               (or *dirty* (some (function %client-message-expired-p) *clients*)))
+      (setf *dirty* nil)
+      (dolist (conn *clients*)
+        (setf (client-conn-render-dirty-p conn) t)))
     (dolist (conn (copy-list *clients*))
       (when (and (client-conn-pending-render-state conn)
                  (client-conn-render-dirty-p conn)

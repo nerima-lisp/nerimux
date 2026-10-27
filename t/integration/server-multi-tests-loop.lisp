@@ -274,7 +274,70 @@
     (expect latest-frame)
     (expect (equalp latest-frame sent))
     (expect (null (nerimux::client-conn-pending-render-state conn)))
-    (expect (not (nerimux::client-conn-render-dirty-p conn))))) (it "multi-serve-iteration-selects-only-pending-write-fds"
+    (expect (not (nerimux::client-conn-render-dirty-p conn))))) (it "multi-serve-iteration-refreshes-pending-render-after-shared-dirty-resize"
+  (with-fake-session (session)
+    (let* ((conn (%make-test-conn :rows 24 :cols 80))
+           (resize-frame (nerimux/protocol:msg-resize 40 100))
+           (old-frame (nerimux/protocol:msg-frame "geometry 24x80"))
+           (latest-frame nil)
+           (sent (make-array 0 :element-type (quote (unsigned-byte 8))))
+           (read-calls 0)
+           (nerimux::*clients* (list conn))
+           (nerimux::*dirty* nil)
+           (nerimux::*server-termination-requested-p* nil)
+           (nerimux::*client-read-round-robin-cursor* nil)
+           (nerimux::*client-write-round-robin-cursor* nil))
+      (setf (nerimux::client-conn-fd conn) 8
+            (nerimux::client-conn-socket conn) :client
+            (nerimux::client-conn-render-dirty-p conn) nil)
+      (nerimux::%queue-client-render-state conn old-frame nil)
+      (with-stubbed-fdefinition
+          ((nerimux::%drain-main-thread-callbacks (lambda () nil))
+           (nerimux::%workspace-job-tick (lambda () nil))
+           (nerimux::%persist-runtime-state
+            (lambda (ignored-session) (declare (ignore ignored-session))))
+           (nerimux::%queue-session-control-output
+            (lambda (ignored-session) (declare (ignore ignored-session))))
+           (nerimux/transport:read-frame-ready
+            (lambda (reader socket &key max-bytes)
+              (declare (ignore reader socket max-bytes))
+              (incf read-calls)
+              (if (= read-calls 1)
+                  (multiple-value-bind (type payload)
+                      (nerimux/protocol:decode-frame resize-frame)
+                    (values type payload :frame))
+                  (values nil nil :would-block))))
+           (nerimux::%render-client-frame
+            (lambda (ignored-session client)
+              (declare (ignore ignored-session))
+              (setf latest-frame
+                    (nerimux/protocol:msg-frame
+                     (format nil "geometry ~Dx~D"
+                             (nerimux::client-conn-rows client)
+                             (nerimux::client-conn-cols client))))))
+           (sb-bsd-sockets:socket-send
+            (lambda (socket buffer length &key dontwait nosignal)
+              (declare (ignore socket dontwait nosignal))
+              (setf sent
+                    (concatenate (quote (vector (unsigned-byte 8)))
+                                 sent
+                                 (subseq buffer 0 length)))
+              length))
+           (nerimux/net::socket-fd
+            (lambda (listener) (declare (ignore listener)) 7))
+           (nerimux/pty::select-fds
+            (lambda (read-fds timeout-us &key write-fds)
+              (declare (ignore timeout-us))
+              (expect (member 8 read-fds))
+              (expect (member 8 write-fds))
+              (values (list 8) (list 8)))))
+        (expect (null (nerimux::%multi-serve-iteration :listener session))))
+      (expect (= 40 (nerimux::client-conn-rows conn)))
+      (expect (= 100 (nerimux::client-conn-cols conn)))
+      (expect (= 2 read-calls))
+      (expect latest-frame)
+      (expect (equalp latest-frame sent))
+      (expect (not (equalp old-frame sent)))))) (it "multi-serve-iteration-selects-only-pending-write-fds"
   (let* ((conn-a (%make-test-conn))
          (conn-b (%make-test-conn))
          (selected-read-fds nil)
@@ -606,7 +669,6 @@
                sent))
       (expect (not (nerimux/transport:frame-writer-pending-p
                     (nerimux::client-conn-frame-writer conn))))))
-
   (it "client-output-fatal-partial-write-drops-and-clears-client-state"
   (let* ((conn (%make-test-conn))
          (first-frame (nerimux/protocol:msg-reply "first"))
