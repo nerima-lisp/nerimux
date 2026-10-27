@@ -52,7 +52,6 @@
                (:file "vcs-tests-status")
                (:file "vcs-fetch-dedup-tests")
                (:file "vcs-worktree-path-tests")
-               (:file "vcs-catalog-tests")
                (:file "vcs-operations-tests")
                (:file "vcs-command-tests")
                (:file "vcs-async-operations-tests")

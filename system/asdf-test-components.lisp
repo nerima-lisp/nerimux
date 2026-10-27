@@ -65,6 +65,8 @@
          (:file "renderer-help-transient-tests")
          (:file "picker-selection-token-tests")
          (:file "workspace-file-diff-cache-tests")
+         (:file "vcs-catalog-rendering-tests")
+         (:file "vcs-worktree-commit-display-tests")
          (:file "net-tests")
          (:file "server-multi-tests-support")
          (:file "server-multi-tests-size")
