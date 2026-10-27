@@ -31,14 +31,23 @@
                 #:read-u32
                 #:decode-frame)
   (:documentation
-   "INFRASTRUCTURE layer: the impure shell around the nerimux/protocol codec.  Moves
-    whole frames across any binary stream, a socket stream in production, a
-    temp-file stream in tests, under a wall-clock budget that keeps a hung peer
-    from blocking a reader forever.  Does no framing of its own.")
+   "INFRASTRUCTURE layer: READ-FRAME and SEND-FRAME provide synchronous binary-stream I/O. The
+    incremental API accepts socket objects directly, uses nonblocking socket
+    calls, and bypasses stream buffering. READ-FRAME-READY returns :FRAME,
+    :PENDING (progress with an incomplete frame), :WOULD-BLOCK (no progress), or
+    :EOF; MAX-BYTES limits bytes transferred per call. WRITE-FRAME-READY returns
+    :COMPLETE, :PENDING (progress with an incomplete frame), or :WOULD-BLOCK.
+    Keep one I/O path per socket: do not mix incremental operations with the
+    stream API. The caller owns the socket, leaves queued frame bytes unchanged
+    until completion, and closes the socket after an I/O failure.")
   (:export
    #:send-frame
    #:read-frame
-   #:with-incoming-frame))
+   #:with-incoming-frame
+   #:frame-reader #:frame-reader-p #:make-frame-reader #:read-frame-ready
+   #:frame-writer #:frame-writer-p #:make-frame-writer
+   #:start-frame-write #:write-frame-ready
+   #:frame-writer-pending-p #:frame-writer-offset #:frame-writer-failed-p))
 
 (defpackage #:nerimux/net
             (:use #:cl)

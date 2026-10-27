@@ -236,6 +236,17 @@
     (with-pipe-fds (rfd wfd)
       (write-byte-to-fd wfd 99)
       (expect (equal (list rfd) (nerimux/pty:select-fds (list -1 rfd) 200000)))))
+  (it "select-fds-reports-read-and-write-readiness"
+    (with-pipe-fds (rfd wfd)
+      (multiple-value-bind (read-ready write-ready)
+          (nerimux/pty:select-fds (list -1 rfd) 200000 :write-fds (list -1 wfd))
+        (expect (null read-ready))
+        (expect (equal (list wfd) write-ready)))
+      (write-byte-to-fd wfd 99)
+      (multiple-value-bind (read-ready write-ready)
+          (nerimux/pty:select-fds (list rfd) 200000 :write-fds (list wfd))
+        (expect (equal (list rfd) read-ready))
+        (expect (equal (list wfd) write-ready)))))
 
 
   (it "pty-child-exit-status-unknown-fd-returns-nil"

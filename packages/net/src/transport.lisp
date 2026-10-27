@@ -1,4 +1,5 @@
 (in-package #:nerimux/transport)
+(eval-when (:compile-toplevel :load-toplevel :execute) (require :sb-bsd-sockets) (require :sb-posix))
 
 (defconstant +read-frame-timeout-seconds+
   30
@@ -144,3 +145,254 @@
             (destructuring-bind (condition &rest body) rule
               `(,condition ,@body)))
           rules))))
+(progn
+  (defconstant +incremental-io-buffer-size+ 65536)
+
+  (defstruct (frame-reader
+              (:constructor %make-frame-reader
+                  (&key buffer scratch offset frame-size failed-p eof-p)))
+    buffer
+    scratch
+    (offset 0)
+    frame-size
+    failed-p
+    eof-p)
+
+  (defun %make-frame-reader-buffer ()
+    (make-array +header-size+
+                :element-type '(unsigned-byte 8)
+                :adjustable t
+                :fill-pointer +header-size+))
+
+  (defun make-frame-reader ()
+    "Create state for reading frames from one nonblocking socket."
+    (%make-frame-reader
+     :buffer (%make-frame-reader-buffer)
+     :scratch (make-array +incremental-io-buffer-size+
+                          :element-type '(unsigned-byte 8))
+     :offset 0))
+
+  (defun %socket-error-errno (condition)
+    (sb-bsd-sockets::socket-error-errno condition))
+
+  (defun %would-block-errno-p (errno)
+    (or (= errno sb-posix:eagain)
+        (= errno sb-posix:ewouldblock)))
+
+  (defun %socket-receive (socket buffer length)
+    (loop
+      (handler-case
+          (multiple-value-bind (received-buffer count address)
+              (sb-bsd-sockets:socket-receive
+               socket buffer length
+               :dontwait t
+               :element-type '(unsigned-byte 8))
+            (declare (ignore received-buffer address))
+            (return-from %socket-receive
+              (if count
+                  (values count :data)
+                  (values nil :would-block))))
+        (sb-bsd-sockets:socket-error (condition)
+          (let ((errno (%socket-error-errno condition)))
+            (cond
+              ((= errno sb-posix:eintr))
+              ((%would-block-errno-p errno)
+               (return-from %socket-receive (values nil :would-block)))
+              (t (error condition))))))))
+
+  (defun %validate-ready-max-bytes (max-bytes)
+    (unless (typep max-bytes '(integer 1 *))
+      (error "MAX-BYTES must be a positive integer, got ~S" max-bytes))
+    max-bytes))
+(progn
+  (defun %reader-set-payload-size (reader)
+    (let ((payload-length
+            (read-u32 (frame-reader-buffer reader)
+                      +payload-length-offset+)))
+      (unless (%payload-length-acceptable-p payload-length)
+        (error
+         "Invalid incremental frame: declared payload length ~D exceeds limit ~D"
+         payload-length
+         +max-frame-payload-bytes+))
+      (let ((frame-size (+ +header-size+ payload-length)))
+        (setf (frame-reader-frame-size reader) frame-size
+              (frame-reader-buffer reader)
+              (adjust-array (frame-reader-buffer reader)
+                            frame-size
+                            :fill-pointer frame-size)))))
+
+  (defun %reader-reset-frame (reader)
+    (setf (frame-reader-buffer reader) (%make-frame-reader-buffer)
+          (frame-reader-offset reader) 0
+          (frame-reader-frame-size reader) nil)))
+(defun read-frame-ready (reader socket &key (max-bytes 65536))
+  "Return TYPE and PAYLOAD with :FRAME when one frame completes. Return NIL,
+   NIL, and :PENDING when this call made progress but the frame is incomplete;
+   return NIL, NIL, and :WOULD-BLOCK when it made no progress. :EOF indicates
+   peer closure, including closure during a partial frame. MAX-BYTES limits all
+   bytes received during this call."
+  (%validate-ready-max-bytes max-bytes)
+  (check-type reader frame-reader)
+  (when (frame-reader-failed-p reader)
+    (error "Cannot read with a failed frame reader"))
+  (when (frame-reader-eof-p reader)
+    (return-from read-frame-ready (values nil nil :eof)))
+  (let ((budget max-bytes)
+        (progress nil))
+    (handler-case
+        (loop
+          (when (and (= (frame-reader-offset reader) +header-size+)
+                     (null (frame-reader-frame-size reader)))
+            (%reader-set-payload-size reader))
+          (when (and (frame-reader-frame-size reader)
+                     (= (frame-reader-offset reader)
+                        (frame-reader-frame-size reader)))
+            (multiple-value-bind (type payload)
+                (decode-frame (frame-reader-buffer reader))
+              (%reader-reset-frame reader)
+              (return (values type payload :frame))))
+          (when (zerop budget)
+            (return (values nil nil :pending)))
+          (let* ((target-size
+                   (or (frame-reader-frame-size reader) +header-size+))
+                 (request-size
+                   (min budget
+                        (length (frame-reader-scratch reader))
+                        (- target-size (frame-reader-offset reader)))))
+            (multiple-value-bind (count status)
+                (%socket-receive socket
+                                 (frame-reader-scratch reader)
+                                 request-size)
+              (cond
+                ((eq status :would-block)
+                 (return
+                   (values nil nil (if progress :pending :would-block))))
+                ((not (eq status :data))
+                 (error "Invalid socket receive status ~S" status))
+                ((not (and (integerp count)
+                           (<= 0 count request-size)))
+                 (error "Invalid socket receive byte count ~S" count))
+                ((zerop count)
+                 (setf (frame-reader-eof-p reader) t)
+                 (return (values nil nil :eof)))
+                (t
+                 (replace (frame-reader-buffer reader)
+                          (frame-reader-scratch reader)
+                          :start1 (frame-reader-offset reader)
+                          :end2 count)
+                 (incf (frame-reader-offset reader) count)
+                 (decf budget count)
+                 (setf progress t))))))
+      (error (condition)
+        (setf (frame-reader-failed-p reader) t)
+        (error condition)))))
+(progn
+  (defstruct (frame-writer
+              (:constructor %make-frame-writer (&key scratch)))
+    frame
+    scratch
+    (offset 0)
+    failed-p)
+
+  (defun make-frame-writer ()
+    "Create single-owner state for writing frames to one nonblocking socket."
+    (%make-frame-writer
+     :scratch (make-array +incremental-io-buffer-size+
+                          :element-type '(unsigned-byte 8))))
+
+  (defun frame-writer-pending-p (writer)
+    (check-type writer frame-writer)
+    (not (null (frame-writer-frame writer))))
+
+  (defun %socket-send (socket buffer length)
+    (loop
+      (handler-case
+          (return-from %socket-send
+            (values
+             (sb-bsd-sockets:socket-send
+              socket buffer length :dontwait t :nosignal t)
+             :data))
+        (sb-bsd-sockets:socket-error (condition)
+          (let ((errno (%socket-error-errno condition)))
+            (cond
+              ((= errno sb-posix:eintr))
+              ((%would-block-errno-p errno)
+               (return-from %socket-send (values nil :would-block)))
+              (t (error condition))))))))
+
+  (defun %validate-incremental-frame (frame)
+    (unless (typep frame '(vector (unsigned-byte 8)))
+      (error "Invalid incremental frame: expected an octet vector, got ~S"
+             (type-of frame)))
+    (%validate-outgoing-frame frame))
+
+  (defun start-frame-write (writer frame)
+    "Queue FRAME if WRITER is idle; keep FRAME unchanged until it completes."
+    (check-type writer frame-writer)
+    (when (frame-writer-failed-p writer)
+      (error "Cannot queue a frame on a failed writer"))
+    (when (frame-writer-pending-p writer)
+      (error "Cannot queue a frame while another frame is pending"))
+    (%validate-incremental-frame frame)
+    (setf (frame-writer-frame writer) frame
+          (frame-writer-offset writer) 0)
+    writer)
+
+  (defun write-frame-ready (writer socket &key (max-bytes 65536))
+    "Return :COMPLETE when the queued frame finishes or WRITER is idle, :PENDING
+     when this call sent bytes but the frame remains incomplete, or :WOULD-BLOCK
+     when this call sent no bytes. MAX-BYTES bounds bytes sent per call."
+    (%validate-ready-max-bytes max-bytes)
+    (check-type writer frame-writer)
+    (when (frame-writer-failed-p writer)
+      (error "Cannot write with a failed frame writer"))
+    (let ((budget max-bytes)
+          (progress 0))
+      (handler-case
+          (loop
+           (let ((frame (frame-writer-frame writer)))
+             (unless frame
+               (return (values :complete progress)))
+             (let* ((remaining
+                     (- (length frame) (frame-writer-offset writer)))
+                    (request-size
+                     (min budget
+                          (length (frame-writer-scratch writer))
+                          remaining)))
+               (when (zerop request-size)
+                 (setf (frame-writer-frame writer) nil
+                       (frame-writer-offset writer) 0)
+                 (return (values :complete progress)))
+               (replace (frame-writer-scratch writer) frame
+                        :start1 0
+                        :start2 (frame-writer-offset writer)
+                        :end2 (+ (frame-writer-offset writer)
+                                 request-size))
+               (multiple-value-bind (count status)
+                   (%socket-send socket
+                                 (frame-writer-scratch writer)
+                                 request-size)
+                 (cond
+                  ((eq status :would-block)
+                   (return
+                    (values (if (plusp progress) :pending :would-block)
+                            progress)))
+                  ((not (eq status :data))
+                   (error "Invalid socket send status ~S" status))
+                  ((not (and (integerp count)
+                             (< 0 count)
+                             (<= count request-size)))
+                   (error "Invalid socket send byte count ~S" count))
+                  (t
+                   (incf (frame-writer-offset writer) count)
+                   (incf progress count)
+                   (decf budget count)
+                   (when (= (frame-writer-offset writer) (length frame))
+                     (setf (frame-writer-frame writer) nil
+                           (frame-writer-offset writer) 0)
+                     (return (values :complete progress)))
+                   (when (zerop budget)
+                     (return (values :pending progress)))))))))
+        (error (condition)
+               (setf (frame-writer-failed-p writer) t)
+               (error condition))))))

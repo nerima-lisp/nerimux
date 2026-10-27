@@ -1,12 +1,12 @@
 (defpackage #:nerimux/pty
   (:use #:cl)
   (:documentation
-   "INFRASTRUCTURE layer: the pseudo-terminal device itself.  Forks a shell under a
-    PTY, moves octets across the master fd, drives termios raw mode and TIOCSWINSZ
-    geometry, and multiplexes readiness with select(2), nerimux needs to poll PTY,
-    socket, and stdin fds together, which is the one libc call sb-posix does not
-    expose.  Supplies the concrete operations that install-pty-port stores into
-    nerimux/ports.")
+   "INFRASTRUCTURE layer for pseudo-terminal operations. It starts shell
+    processes under PTYs, moves octets across PTY master fds, manages terminal
+    mode and size, and provides the fd selector used to poll PTY, socket, and
+    stdin descriptors together. SELECT-FDS returns readable descriptors as its
+    first value for compatibility. With :WRITE-FDS, it also returns writable
+    descriptors as its second value.")
   (:export
    #:forkpty-with-shell
    #:pty-write
