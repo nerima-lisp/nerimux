@@ -18,4 +18,4 @@
    nerimux-version-string-matches-asdf-version test in
    tests/unit/bootstrap/package-version-tests.lisp pins this literal to it so the
    two cannot drift silently again."
-  "0.4.0")
+  "0.5.0")
