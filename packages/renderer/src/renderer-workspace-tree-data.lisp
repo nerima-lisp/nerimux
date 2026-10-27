@@ -273,22 +273,23 @@
      (list (cons (format nil "↓~D" (worktree-behind worktree)) +sgr-behind+)))))
 
 (defun %worktree-change-count-parts (worktree)
-  "WORKTREE's added/deleted line counts as one plain and styled token, each
-   half omitted when it is zero -- \"-0\" said nothing and read as a behind
-   count."
-  (let* ((additions (nerimux/workspace-model:worktree-additions worktree))
-         (deletions (nerimux/workspace-model:worktree-deletions worktree))
-         (parts
-          (append
-           (when (plusp additions)
-             (list (cons (format nil "+~D" additions) +sgr-ok+)))
-           (when (plusp deletions)
-             (list (cons (format nil "−~D" deletions) +sgr-alert+))))))
-    (when parts
-      (cons (format nil "~{~A~^ ~}" (mapcar #'car parts))
-            (format nil "~{~A~^ ~}"
-                    (mapcar (lambda (part) (%sgr-wrap (car part) (cdr part)))
-                            parts))))))
+  "WORKTREE's added/deleted counts as plain and styled tokens.
+   Return UNKNOWN when numstat failed; zero sides are omitted."
+  (if (eq (nerimux/workspace-model:worktree-numstat-state worktree) :failed)
+      (cons "UNKNOWN" (%sgr-wrap "UNKNOWN" +sgr-faint+))
+      (let* ((additions (nerimux/workspace-model:worktree-additions worktree))
+             (deletions (nerimux/workspace-model:worktree-deletions worktree))
+             (parts
+              (append
+               (when (plusp additions)
+                 (list (cons (format nil "+~D" additions) +sgr-ok+)))
+               (when (plusp deletions)
+                 (list (cons (format nil "−~D" deletions) +sgr-alert+))))))
+        (when parts
+          (cons (format nil "~{~A~^ ~}" (mapcar #'car parts))
+                (format nil "~{~A~^ ~}"
+                        (mapcar (lambda (part) (%sgr-wrap (car part) (cdr part)))
+                                parts)))))))
 
 (defun %worktree-shell-count-text (worktree)
   "\"1 shell\"/\"N shells\" for WORKTREE's non-agent panes, NIL when it holds

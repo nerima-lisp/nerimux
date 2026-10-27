@@ -1,17 +1,19 @@
 (in-package #:nerimux/renderer)
 
 (defun %worktree-change-count-token (worktree)
-  "Return WORKTREE's non-empty worktree diff line-count token.
+  "Return WORKTREE's diff-count token, or UNKNOWN when numstat failed.
    A zero side is left out: `+1 -0` on a repository with no remote reads as
    the ahead/behind pair the docs give `+N`/`-N` to."
   (when (worktree-status worktree)
-    (let ((additions (nerimux/workspace-model:worktree-additions worktree))
-          (deletions (nerimux/workspace-model:worktree-deletions worktree)))
-      (when (or (plusp additions) (plusp deletions))
-        (format nil "~{~A~^ ~}"
-                (remove nil
-                        (list (when (plusp additions) (format nil "+~D" additions))
-                              (when (plusp deletions) (format nil "-~D" deletions)))))))))
+    (if (eq (nerimux/workspace-model:worktree-numstat-state worktree) :failed)
+        "UNKNOWN"
+        (let ((additions (nerimux/workspace-model:worktree-additions worktree))
+              (deletions (nerimux/workspace-model:worktree-deletions worktree)))
+          (when (or (plusp additions) (plusp deletions))
+            (format nil "~{~A~^ ~}"
+                    (remove nil
+                            (list (when (plusp additions) (format nil "+~D" additions))
+                                  (when (plusp deletions) (format nil "-~D" deletions))))))))))
 
 (defun %worktree-ahead-behind-tokens (worktree style)
   "WORKTREE's nonzero ahead/behind tokens: `AHEAD 1`/`BEHIND 2` for the tree

@@ -62,6 +62,7 @@
          (:file "renderer-selection-copy-mode-tests")
          (:file "renderer-copy-search-highlight-tests")
          (:file "renderer-copy-mode-frame-tests")
+         (:file "renderer-worktree-numstat-tests")
          (:file "renderer-help-transient-tests")
          (:file "picker-selection-token-tests")
          (:file "workspace-file-diff-cache-tests")
