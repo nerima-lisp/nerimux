@@ -442,6 +442,96 @@
       (expect (null (nerimux::client-conn-active-output-frame conn)))
       (expect (not (nerimux/transport:frame-writer-pending-p
                     (nerimux::client-conn-frame-writer conn))))))
+  (it "multi-serve-iteration-writes-eligible-render-before-next-select"
+      (let* ((conn (%make-test-conn))
+             (interval (nerimux::%client-render-interval-ticks))
+             (prior-render-at
+              (- (get-internal-real-time) (* 2 interval)))
+             (expected-frame (nerimux/protocol:msg-frame "updated"))
+             (select-calls 0)
+             (write-count 0)
+             (write-start-select nil)
+             (frame-at-write nil)
+             (rendered-at nil)
+             (pending-after-first-iteration nil)
+             (write-count-after-timeout nil)
+             (pending-at-second-select nil)
+             (second-select-timeout nil)
+             (second-write-fds nil)
+             (nerimux::*clients* (list conn))
+             (nerimux::*dirty* nil)
+             (nerimux::*server-termination-requested-p* nil)
+             (nerimux::*client-read-round-robin-cursor* nil)
+             (nerimux::*client-write-round-robin-cursor* nil))
+        (setf (nerimux::client-conn-fd conn) 8
+              (nerimux::client-conn-last-render-at conn) prior-render-at)
+        (with-stubbed-fdefinition
+         ((nerimux::%drain-main-thread-callbacks (lambda () nil))
+          (nerimux::%workspace-job-tick (lambda () nil))
+          (nerimux::%persist-runtime-state
+           (lambda (session) (declare (ignore session))))
+          (nerimux::%queue-session-control-output
+           (lambda (session) (declare (ignore session))))
+          (nerimux::%dispatch-ready-clients
+           (lambda (session ready)
+             (declare (ignore session))
+             (when (member 8 ready) (setf nerimux::*dirty* t))
+             nil))
+          (nerimux::%render-client-frame
+           (lambda (session client)
+             (declare (ignore session client))
+             (setf rendered-at (get-internal-real-time))
+             expected-frame))
+          (nerimux::%advance-client-output
+           (lambda (client &key max-bytes)
+             (declare (ignore max-bytes))
+             (let ((pending
+                    (nerimux::client-conn-pending-render-state client)))
+               (expect pending)
+               (incf write-count)
+               (setf write-start-select select-calls
+                     frame-at-write (first pending)
+                     (nerimux::client-conn-pending-render-state client) nil)
+               (values :complete (length frame-at-write)))))
+          (nerimux/net::socket-fd
+           (lambda (listener) (declare (ignore listener)) 7))
+          (nerimux/pty::select-fds
+           (lambda (read-fds timeout-us &key write-fds)
+             (declare (ignore read-fds))
+             (incf select-calls)
+             (case select-calls
+               (1
+                (expect (null write-fds))
+                (values (list 8) nil))
+               (2
+                (setf second-select-timeout timeout-us
+                      second-write-fds write-fds
+                      pending-at-second-select
+                      (nerimux::%client-output-pending-p conn))
+                (values nil nil))
+               (3
+                (values nil
+                        (if (member 8 write-fds)
+                            (list 8)
+                          nil)))
+               (otherwise
+                (error "Unexpected select call ~D" select-calls))))))
+         (expect (null (nerimux::%multi-serve-iteration :listener :session)))
+         (setf pending-after-first-iteration
+               (nerimux::%client-output-pending-p conn))
+         (expect (null (nerimux::%multi-serve-iteration :listener :session)))
+         (setf write-count-after-timeout write-count)
+         (expect (null (nerimux::%multi-serve-iteration :listener :session)))
+         (expect (= 3 select-calls))
+         (expect (= 50000 second-select-timeout))
+         (expect (= 1 write-count))
+         (expect (= 1 write-start-select))
+         (expect (equalp expected-frame frame-at-write))
+         (expect (null pending-after-first-iteration))
+         (expect (= 1 write-count-after-timeout))
+         (expect (null second-write-fds))
+         (expect (not pending-at-second-select))
+         (expect (>= rendered-at (+ prior-render-at interval))))))
 ) (it "run-multi-server-loop-continues-after-nil-iteration"
     (let ((calls 0)
           (nerimux::*running* t))
