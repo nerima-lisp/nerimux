@@ -139,7 +139,12 @@
             (return-from %multi-serve-iteration :quit))
           (%workspace-job-tick)
           (%persist-runtime-state session)
-          (%schedule-client-render-frames session)
+          (let ((pending-before-render
+                  (remove-if-not #'%client-output-pending-p
+                                 (copy-list *clients*))))
+            (%schedule-client-render-frames session)
+            ;; Do not retry writers that remained pending after the earlier flush.
+            (%flush-ready-client-output nil pending-before-render))
           nil)))))
 (defun %drop-expired-client-io (now)
   (dolist (conn (copy-list *clients*))
